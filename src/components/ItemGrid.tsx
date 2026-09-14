@@ -42,7 +42,7 @@ export function ItemGrid({
         {items.map((item) => (
           <li key={item.id}>
             <Link
-              href={`/items/${item.id}`}
+              href={`/items?id=${item.id}`}
               className="flex items-center gap-4 py-3 hover:bg-card"
             >
               <div className="h-16 w-[3.2rem] shrink-0 overflow-hidden rounded-card bg-line">
@@ -77,7 +77,7 @@ export function ItemGrid({
       {items.map((item) => (
         <Link
           key={item.id}
-          href={`/items/${item.id}`}
+          href={`/items?id=${item.id}`}
           className="group rounded-card border border-line bg-card hover:border-ink"
         >
           <div className="photo-frame rounded-t-card">

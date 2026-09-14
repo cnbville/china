@@ -1,0 +1,51 @@
+name: Deploy to GitHub Pages
+
+# Build the static export and publish it to GitHub Pages on every push to main
+# (and on demand via the "Run workflow" button).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Permissions the deploy action needs.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; newer pushes cancel in-flight builds.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # These are the public Supabase values (safe to commit — the anon /
+      # publishable key is designed to ship in the browser; RLS protects the
+      # data). They're baked into the static bundle at build time.
+      NEXT_PUBLIC_SUPABASE_URL: https://ncsdxperzfwvksvdcjwn.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: sb_publishable_0iF-kz4r1XSFZSvcCBFW-g_zsmzW78z
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -61,7 +61,7 @@ export default function FeedPage() {
                 {data.collections.map((c) => (
                   <Link
                     key={c.id}
-                    href={`/collections/${c.id}`}
+                    href={`/collections?id=${c.id}`}
                     className="rounded-card border border-line bg-card p-4 hover:border-ink"
                   >
                     <div className="font-serif text-xl leading-tight">
@@ -85,7 +85,7 @@ export default function FeedPage() {
                 {data.categories.map((cat) => (
                   <Link
                     key={cat.id}
-                    href={`/categories/${cat.id}`}
+                    href={`/categories?id=${cat.id}`}
                     className="rounded-card border border-line bg-card px-3 py-1.5 text-meta hover:border-ink"
                   >
                     {cat.name}

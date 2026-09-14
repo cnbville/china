@@ -1,8 +1,19 @@
+"use client";
+
 import Link from "next/link";
-import { signOut } from "@/app/auth/actions";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 
 // App-wide header. Quiet and out of the way (plan section 6).
 export function Header() {
+  const router = useRouter();
+
+  async function onSignOut() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.replace("/login");
+  }
+
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-paper/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
@@ -23,11 +34,13 @@ export function Header() {
           >
             Add item
           </Link>
-          <form action={signOut}>
-            <button type="submit" className="text-muted hover:text-ink">
-              Sign out
-            </button>
-          </form>
+          <button
+            type="button"
+            onClick={onSignOut}
+            className="text-muted hover:text-ink"
+          >
+            Sign out
+          </button>
         </nav>
       </div>
     </header>
