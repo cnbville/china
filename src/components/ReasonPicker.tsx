@@ -31,10 +31,10 @@ export function ReasonPicker({
               type="button"
               onClick={() => toggle(reason)}
               className={
-                "rounded-card border px-2.5 py-1 text-meta transition-colors " +
+                "rounded-pill border px-2.5 py-1 text-meta transition-colors " +
                 (active
-                  ? "border-accent bg-accent text-paper"
-                  : "border-line bg-card text-muted hover:border-ink hover:text-ink")
+                  ? "border-accent bg-accent text-white shadow-glow"
+                  : "border-line bg-card text-muted hover:border-ink/40 hover:text-ink")
               }
             >
               {reason}

@@ -40,50 +40,63 @@ function LoginForm() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
-      <h1 className="font-serif text-4xl">Sourcing Catalog</h1>
-      <p className="mt-2 text-meta text-muted">Sign in to continue.</p>
-
-      <form onSubmit={onSubmit} className="mt-8 space-y-4">
-        <div>
-          <label htmlFor="email" className="block text-meta text-muted">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            autoComplete="username"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="mt-1 w-full rounded-card border border-line bg-card px-3 py-2 text-body outline-none focus:border-accent"
-          />
+      <div className="animate-fade-up">
+        <div className="mb-5 flex items-center gap-2">
+          <span className="h-5 w-1.5 rounded-pill bg-accent shadow-glow" />
+          <span className="text-meta uppercase tracking-[0.2em] text-muted">
+            Private
+          </span>
         </div>
+        <h1 className="font-serif text-5xl leading-[1.05]">Sourcing Catalog</h1>
+        <p className="mt-3 text-body text-muted">
+          Every factory link for every piece, in one place.
+        </p>
 
-        <div>
-          <label htmlFor="password" className="block text-meta text-muted">
-            Password
-          </label>
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="mt-1 w-full rounded-card border border-line bg-card px-3 py-2 text-body outline-none focus:border-accent"
-          />
-        </div>
-
-        {error && <p className="text-meta text-accent">{error}</p>}
-
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-card bg-ink px-3 py-2 text-body text-paper disabled:opacity-50"
+        <form
+          onSubmit={onSubmit}
+          className="mt-8 space-y-4 rounded-card border border-line bg-card/70 p-6 shadow-lift backdrop-blur"
         >
-          {busy ? "Signing in…" : "Sign in"}
-        </button>
-      </form>
+          <div>
+            <label htmlFor="email" className="block text-meta text-muted">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input mt-1"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="password" className="block text-meta text-muted">
+              Password
+            </label>
+            <input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="input mt-1"
+            />
+          </div>
+
+          {error && <p className="text-meta text-accentSoft">{error}</p>}
+
+          <button
+            type="submit"
+            disabled={busy}
+            className="btn-accent w-full disabled:opacity-50"
+          >
+            {busy ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </div>
     </main>
   );
 }

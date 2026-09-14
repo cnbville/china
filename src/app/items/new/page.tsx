@@ -265,7 +265,7 @@ export default function AddItemPage() {
             <button
               type="submit"
               disabled={busy}
-              className="rounded-card bg-ink px-4 py-2 text-body text-paper disabled:opacity-50"
+              className="btn-accent disabled:opacity-50"
             >
               {busy ? "Saving…" : "Save item"}
             </button>

@@ -148,7 +148,7 @@ function ItemBody({
     <div className="grid gap-8 md:grid-cols-[minmax(0,20rem)_1fr]">
       {/* Photo */}
       <div>
-        <div className="photo-frame rounded-card border border-line">
+        <div className="photo-frame rounded-card border border-line shadow-lift">
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt={item.title} />
@@ -370,9 +370,9 @@ function SourcesSection({
                 0,
               );
             }}
-            className="rounded-card border border-line px-3 py-1.5 text-meta hover:border-ink"
+            className="btn-ghost"
           >
-            Add source
+            + Add source
           </button>
         )}
       </div>
@@ -390,7 +390,7 @@ function SourcesSection({
               <div className="mt-3 flex gap-3">
                 <button
                   onClick={() => saveEdit(s.id)}
-                  className="rounded-card bg-ink px-3 py-1.5 text-meta text-paper"
+                  className="btn-accent px-3 py-1.5 text-meta"
                 >
                   Save
                 </button>
@@ -432,7 +432,7 @@ function SourcesSection({
           <div className="mt-3 flex gap-3">
             <button
               onClick={addSource}
-              className="rounded-card bg-ink px-3 py-1.5 text-meta text-paper"
+              className="btn-accent px-3 py-1.5 text-meta"
             >
               Add
             </button>
@@ -467,11 +467,11 @@ function SourceRow({
   onDelete: () => void;
 }) {
   return (
-    <li className="flex items-start gap-3 rounded-card border border-line bg-card p-3">
+    <li className="flex items-start gap-3 rounded-card border border-line bg-card/60 p-3 transition-colors hover:border-line/80 hover:bg-card">
       {/* Rank badge: small filled square, accent, tabular number. Unranked gets
           no badge at all (plan section 6). */}
       {source.rank != null ? (
-        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[2px] bg-accent text-meta text-paper tnum">
+        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-accent text-meta font-medium text-white shadow-glow tnum">
           {source.rank}
         </span>
       ) : (
@@ -498,7 +498,7 @@ function SourceRow({
             {source.reasons.map((r) => (
               <span
                 key={r}
-                className="rounded-card border border-line px-1.5 py-0.5 text-[11px] text-muted"
+                className="rounded-pill border border-line bg-surface2/50 px-2 py-0.5 text-[11px] text-muted"
               >
                 {r}
               </span>
@@ -515,7 +515,7 @@ function SourceRow({
             href={source.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-accent underline"
+            className="text-accentSoft underline underline-offset-2 hover:text-accent"
           >
             Open link ↗
           </a>

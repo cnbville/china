@@ -160,27 +160,33 @@ export function CategoryBrowser({
     <>
       <Header />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <div className="flex items-baseline justify-between gap-4">
-          <h1 className="font-serif text-3xl">{data?.categoryName ?? "…"}</h1>
-          <div className="flex items-center gap-1 text-meta">
-            <button
-              onClick={() => setView("grid")}
-              className={
-                "rounded-card border px-2 py-1 " +
-                (view === "grid" ? "border-ink" : "border-line text-muted")
-              }
-            >
-              Grid
-            </button>
-            <button
-              onClick={() => setView("list")}
-              className={
-                "rounded-card border px-2 py-1 " +
-                (view === "list" ? "border-ink" : "border-line text-muted")
-              }
-            >
-              List
-            </button>
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <span className="h-3 w-1.5 rounded-pill bg-accent shadow-glow" />
+              <span className="text-meta uppercase tracking-[0.2em] text-muted">
+                Category
+              </span>
+            </div>
+            <h1 className="font-serif text-4xl leading-tight">
+              {data?.categoryName ?? "…"}
+            </h1>
+          </div>
+          <div className="flex items-center gap-1 rounded-pill border border-line bg-card/60 p-1 text-meta">
+            {(["grid", "list"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={
+                  "rounded-pill px-3 py-1 capitalize transition-colors " +
+                  (view === v
+                    ? "bg-accent text-white"
+                    : "text-muted hover:text-ink")
+                }
+              >
+                {v}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -312,7 +318,9 @@ function Toggle({
       onClick={onClick}
       className={
         "rounded-card border px-2 py-1 " +
-        (on ? "border-accent bg-accent text-paper" : "border-line text-muted")
+        (on
+          ? "border-accent bg-accent text-white"
+          : "border-line text-muted hover:text-ink")
       }
     >
       {label}
