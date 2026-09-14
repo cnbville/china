@@ -10,7 +10,10 @@ import { createClient } from "@/lib/supabase/client";
 export function AuthGate({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const isLogin = pathname === "/login";
+  // Normalize trailing slash — with `trailingSlash: true` (for Pages) the login
+  // route is "/login/", so a bare "/login" check would fail and blank the page.
+  const normalized = pathname !== "/" ? pathname.replace(/\/+$/, "") : "/";
+  const isLogin = normalized === "/login";
   const [ready, setReady] = useState(false);
   const [authed, setAuthed] = useState(false);
 
