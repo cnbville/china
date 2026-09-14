@@ -50,50 +50,63 @@ export default function FeedPage() {
         {loading && !data && <p className="text-meta text-muted">Loading…</p>}
 
         {data && (
-          <>
-            <h1 className="font-serif text-3xl">Collections</h1>
+          <div className="animate-fade-up">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="h-3.5 w-1.5 rounded-pill bg-accent shadow-glow" />
+              <span className="text-meta uppercase tracking-[0.2em] text-muted">
+                Collections
+              </span>
+            </div>
+            <h1 className="font-serif text-4xl leading-tight md:text-5xl">
+              Your library
+            </h1>
+
             {data.collections.length === 0 ? (
-              <p className="mt-3 text-meta text-muted">
+              <p className="mt-4 text-body text-muted">
                 No collections yet. Add an item and give it a collection.
               </p>
             ) : (
-              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+              <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {data.collections.map((c) => (
                   <Link
                     key={c.id}
                     href={`/collections?id=${c.id}`}
-                    className="rounded-card border border-line bg-card p-4 hover:border-ink"
+                    className="group relative overflow-hidden rounded-card border border-line bg-card p-5 transition-all hover:border-accent/60 hover:shadow-lift"
                   >
-                    <div className="font-serif text-xl leading-tight">
+                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                    <div className="font-serif text-2xl leading-tight">
                       {c.name}
                     </div>
-                    <div className="mt-2 text-meta text-muted tnum">
-                      {data.countsByCollection[c.id] ?? 0} items
+                    <div className="mt-3 text-meta text-muted tnum">
+                      <span className="text-accentSoft">
+                        {data.countsByCollection[c.id] ?? 0}
+                      </span>{" "}
+                      items
                     </div>
                   </Link>
                 ))}
               </div>
             )}
 
-            <h2 className="mt-12 text-meta uppercase tracking-widest text-muted">
+            <h2 className="mt-14 text-meta uppercase tracking-[0.2em] text-muted">
               Browse by category
             </h2>
             {data.categories.length === 0 ? (
               <p className="mt-3 text-meta text-muted">No categories yet.</p>
             ) : (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {data.categories.map((cat) => (
                   <Link
                     key={cat.id}
                     href={`/categories?id=${cat.id}`}
-                    className="rounded-card border border-line bg-card px-3 py-1.5 text-meta hover:border-ink"
+                    className="rounded-pill border border-line bg-card/60 px-4 py-1.5 text-meta text-muted transition-colors hover:border-accent/60 hover:text-ink"
                   >
                     {cat.name}
                   </Link>
                 ))}
               </div>
             )}
-          </>
+          </div>
         )}
       </main>
     </>

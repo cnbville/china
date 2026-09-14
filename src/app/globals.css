@@ -3,12 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --paper: #faf9f7;
-  --card: #ffffff;
-  --ink: #1a1917;
-  --muted: #6b6764;
-  --line: #e3e0da;
-  --accent: #8b4a2b;
+  --paper: #0a0b0e;
+  --card: #13161d;
+  --surface2: #1a1e27;
+  --ink: #eceef1;
+  --muted: #8a909c;
+  --line: #262b36;
+  --accent: #ff2e43;
+  --accent-soft: #ff5c6c;
 }
 
 html,
@@ -19,34 +21,87 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Cold-night canvas: a faint blue haze up top, deep dark everywhere else, plus
+   a whisper of red bleeding in from the edges. */
 body {
   font-size: 14px;
   line-height: 1.5;
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      1200px 620px at 50% -12%,
+      rgba(37, 55, 82, 0.55) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      900px 500px at 100% 0%,
+      rgba(255, 46, 67, 0.08) 0%,
+      transparent 55%
+    ),
+    var(--paper);
+  background-attachment: fixed;
 }
 
-/* Prices and counts: tabular numerals (section 6). */
+::selection {
+  background: rgba(255, 46, 67, 0.3);
+  color: #fff;
+}
+
+/* Thin, dark scrollbars to match the night theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
 .tnum {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
 }
 
-/* Tight tracking on UI text. */
 .tracking-tightish {
   letter-spacing: -0.01em;
 }
 
 @layer components {
-  /* Shared text-input styling so forms stay consistent and quiet. */
+  /* Dark, quiet inputs with a red focus ring. */
   .input {
-    @apply w-full rounded-card border border-line bg-card px-3 py-2 text-body outline-none focus:border-accent;
+    @apply w-full rounded-card border border-line bg-surface2/70 px-3 py-2 text-body text-ink outline-none transition-colors;
+    @apply placeholder:text-muted/70 focus:border-accent;
+  }
+  .input:focus {
+    box-shadow: 0 0 0 3px rgba(255, 46, 67, 0.18);
+  }
+
+  /* Primary action: red, with a soft glow on hover. */
+  .btn-accent {
+    @apply rounded-card bg-accent px-4 py-2 text-body font-medium text-white transition;
+    @apply hover:bg-accentSoft;
+  }
+  .btn-accent:hover {
+    box-shadow: 0 6px 24px rgba(255, 46, 67, 0.28);
+  }
+
+  /* Quiet secondary button. */
+  .btn-ghost {
+    @apply rounded-card border border-line bg-card/60 px-3 py-1.5 text-meta text-ink transition-colors hover:border-ink/40 hover:bg-surface2;
   }
 }
 
-/* Photos fill their frame edge to edge, 4:5 ratio, no internal padding. */
+/* Photos fill their frame edge to edge, 4:5 ratio, no internal padding. On the
+   dark canvas they sit in a subtle inset frame and lift slightly on hover. */
 .photo-frame {
   aspect-ratio: 4 / 5;
   overflow: hidden;
-  background: var(--line);
+  background: #05060a;
+  position: relative;
 }
 
 .photo-frame > img {
@@ -54,4 +109,22 @@ body {
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Slow zoom when hovering a card. */
+.group:hover .photo-frame > img {
+  transform: scale(1.045);
+}
+
+/* Fields inside forms use the native dark control colors. */
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 1rem;
+  height: 1rem;
+}
+
+select option {
+  background: var(--card);
+  color: var(--ink);
 }

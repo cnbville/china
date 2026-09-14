@@ -44,7 +44,15 @@ export function CollectionCategories({ collectionId }: { collectionId: string })
     <>
       <Header />
       <main className="mx-auto max-w-6xl px-4 py-8">
-        <h1 className="font-serif text-3xl">{data?.collectionName ?? "…"}</h1>
+        <div className="mb-1 flex items-center gap-2">
+          <span className="h-3 w-1.5 rounded-pill bg-accent shadow-glow" />
+          <span className="text-meta uppercase tracking-[0.2em] text-muted">
+            Collection
+          </span>
+        </div>
+        <h1 className="font-serif text-4xl leading-tight">
+          {data?.collectionName ?? "…"}
+        </h1>
 
         {error && <p className="mt-4 text-meta text-accent">{error}</p>}
         {loading && !data && (
@@ -63,11 +71,12 @@ export function CollectionCategories({ collectionId }: { collectionId: string })
               <Link
                 key={cat.id}
                 href={`/categories?id=${cat.id}&collection=${collectionId}`}
-                className="rounded-card border border-line bg-card p-4 hover:border-ink"
+                className="group relative overflow-hidden rounded-card border border-line bg-card p-5 transition-all hover:border-accent/60 hover:shadow-lift"
               >
-                <div className="font-serif text-xl leading-tight">{cat.name}</div>
-                <div className="mt-2 text-meta text-muted tnum">
-                  {cat.count} items
+                <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
+                <div className="font-serif text-2xl leading-tight">{cat.name}</div>
+                <div className="mt-3 text-meta text-muted tnum">
+                  <span className="text-accentSoft">{cat.count}</span> items
                 </div>
               </Link>
             ))}
