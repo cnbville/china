@@ -35,6 +35,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Ensure GitHub Pages serves the _next/ folder (it ignores underscore
+      # dirs unless this marker is present). Also emitted via public/.nojekyll.
+      - run: touch out/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
