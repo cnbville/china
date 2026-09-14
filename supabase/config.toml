@@ -1,0 +1,32 @@
+# Supabase project config. Applied to local dev by the CLI; the settings under
+# [auth] can be pushed to the linked project with `supabase config push`.
+project_id = "sourcing-catalog"
+
+[db]
+port = 54322
+major_version = 15
+
+[storage]
+enabled = true
+file_size_limit = "10MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["https://localhost:3000"]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+
+# Sign-ups disabled so nobody else can create an account (plan section 2).
+# The single account is created manually in the dashboard.
+enable_signup = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = false
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage"]
+extra_search_path = ["public", "extensions"]

@@ -1,0 +1,32 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# next
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# env
+.env
+.env.local
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+
+# local backups written by scripts/backup.ts default to a sibling folder,
+# but guard against anyone pointing it inside the repo
+/backups/
