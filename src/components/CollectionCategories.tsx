@@ -62,7 +62,7 @@ export function CollectionCategories({ collectionId }: { collectionId: string })
             {data.categories.map((cat) => (
               <Link
                 key={cat.id}
-                href={`/categories/${cat.id}?collection=${collectionId}`}
+                href={`/categories?id=${cat.id}&collection=${collectionId}`}
                 className="rounded-card border border-line bg-card p-4 hover:border-ink"
               >
                 <div className="font-serif text-xl leading-tight">{cat.name}</div>

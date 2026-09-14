@@ -101,12 +101,28 @@ your shell before running, or keep it only in `.env.local` (gitignored). Run a
 backup before anything schema-related. A restore you've never tested isn't known
 to work — run one once.
 
-## Deploy (Vercel)
+## Deploy (GitHub Pages)
 
-Import the repo, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-in the Vercel project env, and deploy. The service role key is **not** used by the
-app and should not be added to Vercel. Add your Vercel URL to Supabase Auth →
-URL Configuration (Site URL / redirect URLs).
+The app is built as a **static export** (`output: "export"` in `next.config.js`)
+so it can be hosted on GitHub Pages with no server — every screen talks to
+Supabase directly from the browser, and auth + routing are client-side.
+
+Deployment is automated by `.github/workflows/deploy.yml`: on every push to
+`main` it builds the static site and publishes it to Pages. One-time setup:
+
+1. Make the repository **public** (Pages is free only on public repos).
+2. Repo **Settings → Pages → Build and deployment → Source → GitHub Actions**.
+3. Push to `main` (or run the workflow manually). The site lands at
+   `https://<user>.github.io/china/` — the `/china` base path is set in
+   `next.config.js`; rename it if you rename the repo.
+
+The public Supabase URL + publishable key are set as build-time env in the
+workflow. The service role key is **not** used by the app and must never be added.
+
+> Alternative: **Vercel** works too and doesn't require the repo to be public —
+> import the repo and set the two `NEXT_PUBLIC_*` env vars. If you go that route,
+> remove `output: "export"`, `basePath`, and `assetPrefix` from `next.config.js`
+> to get server rendering back.
 
 ## Where things live
 
