@@ -106,6 +106,8 @@ function ItemBody({
   const [wanted, setWanted] = useState(item.wanted);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [busyMsg, setBusyMsg] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     getSignedUrl(supabase, item.photo_path).then(setPhotoUrl).catch(() => {});
@@ -124,6 +126,40 @@ function ItemBody({
   async function saveCategory(name: string) {
     const id = await resolveCategoryId(supabase, name);
     patchItem({ category_id: id });
+  }
+
+  // Explicit "save everything" — fields also autosave on blur, but a real button
+  // is clearer and covers cases where blur doesn't fire (e.g. on mobile).
+  async function saveAll() {
+    setSaving(true);
+    setBusyMsg(null);
+    try {
+      const [collection_id, category_id] = await Promise.all([
+        resolveCollectionId(supabase, fields.collection),
+        resolveCategoryId(supabase, fields.category),
+      ]);
+      const { error } = await supabase
+        .from("items")
+        .update({
+          title: fields.title.trim() || item.title,
+          type: fields.type.trim() || null,
+          brand: fields.brand.trim() || null,
+          notes: fields.notes.trim() || null,
+          collection_id,
+          category_id,
+          liked,
+          wanted,
+        })
+        .eq("id", item.id);
+      if (error) throw error;
+      setSavedMsg("Saved ✓");
+      setTimeout(() => setSavedMsg(null), 2500);
+      refetch();
+    } catch (e) {
+      setBusyMsg(e instanceof Error ? e.message : "Save failed.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function onDelete() {
@@ -250,6 +286,20 @@ function ItemBody({
             onBlur={() => patchItem({ notes: fields.notes.trim() || null })}
             className="input mt-1"
           />
+        </div>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={saveAll}
+            disabled={saving}
+            className="btn-accent disabled:opacity-50"
+          >
+            {saving ? "Saving…" : "Save changes"}
+          </button>
+          {savedMsg && (
+            <span className="text-meta text-accentSoft">{savedMsg}</span>
+          )}
         </div>
 
         <SourcesSection
