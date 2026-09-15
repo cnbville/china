@@ -2,7 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { Header } from "@/components/Header";
+import { AppShell } from "@/components/AppShell";
 import { ItemsView } from "@/components/ItemsView";
 import { CollectionsList } from "@/components/CollectionsList";
 
@@ -18,11 +18,10 @@ function CollectionsInner() {
 
 export default function CollectionsPage() {
   return (
-    <>
-      <Header />
+    <AppShell>
       <Suspense>
         <CollectionsInner />
       </Suspense>
-    </>
+    </AppShell>
   );
 }

@@ -1,13 +1,12 @@
 "use client";
 
-import { Header } from "@/components/Header";
+import { AppShell } from "@/components/AppShell";
 import { ItemsView } from "@/components/ItemsView";
 
 export default function LikedPage() {
   return (
-    <>
-      <Header />
+    <AppShell>
       <ItemsView scope={{ kind: "liked" }} />
-    </>
+    </AppShell>
   );
 }
