@@ -211,7 +211,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
   }, [filtered]);
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <div>
       <CatalogNav />
 
       <div className="mt-6 flex items-end justify-between gap-4">
@@ -366,7 +366,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
           )}
         </>
       )}
-    </main>
+    </div>
   );
 }
 

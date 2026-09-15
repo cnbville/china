@@ -34,7 +34,7 @@ export function CollectionsList() {
   });
 
   return (
-    <main className="mx-auto max-w-6xl px-4 py-8">
+    <div>
       <CatalogNav />
 
       <div className="mb-1 mt-6 flex items-center gap-2">
@@ -76,6 +76,6 @@ export function CollectionsList() {
           ))}
         </div>
       )}
-    </main>
+    </div>
   );
 }
