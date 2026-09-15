@@ -165,8 +165,8 @@ function CollectionCard({
     <div className="group relative overflow-hidden rounded-card border border-line bg-card p-5 transition-all hover:border-accent/60 hover:shadow-lift">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
-      {/* Hover actions: rename / delete. Sit above the card link. */}
-      <div className="absolute right-2 top-2 z-10 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      {/* Rename / delete actions. Always visible so they work on touch too. */}
+      <div className="absolute right-2 top-2 z-10 flex gap-1">
         <IconBtn label="Rename" onClick={() => setEditing(true)} disabled={busy}>
           <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
         </IconBtn>

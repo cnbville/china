@@ -91,7 +91,7 @@ export function ItemGrid({
               <QuickToggles item={item} onToggle={onToggle} />
             </div>
             {onDelete && (
-              <div className="absolute left-2 top-2 opacity-0 transition-opacity group-hover:opacity-100">
+              <div className="absolute left-2 top-2">
                 <DeleteBtn item={item} onDelete={onDelete} />
               </div>
             )}
