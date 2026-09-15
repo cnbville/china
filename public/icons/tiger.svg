@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="White tiger mark">
+  <defs>
+    <radialGradient id="bg" cx="34%" cy="22%" r="95%">
+      <stop offset="0%" stop-color="#ff6472"/>
+      <stop offset="55%" stop-color="#ff2e43"/>
+      <stop offset="100%" stop-color="#d51a34"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- ears -->
+  <path d="M158 176 C126 96 214 112 214 184 Z" fill="#fff"/>
+  <path d="M354 176 C386 96 298 112 298 184 Z" fill="#fff"/>
+  <path d="M174 170 C158 124 200 134 202 174 Z" fill="#ff3145"/>
+  <path d="M338 170 C354 124 312 134 310 174 Z" fill="#ff3145"/>
+
+  <!-- head + cheek ruff -->
+  <path d="M256 150
+           C338 150 368 214 368 286
+           C368 330 356 360 336 384
+           C356 388 366 404 360 420
+           C338 410 326 398 320 388
+           C302 410 282 424 256 424
+           C230 424 210 410 192 388
+           C186 398 174 410 152 420
+           C146 404 156 388 176 384
+           C156 360 144 330 144 286
+           C144 214 174 150 256 150 Z" fill="#fff"/>
+
+  <!-- forehead stripes -->
+  <g fill="#17181c">
+    <path d="M256 168 l-9 52 l18 0 Z"/>
+    <path d="M212 182 c-16 16 -12 40 0 58 c-4 -20 -2 -40 8 -54 Z"/>
+    <path d="M300 182 c16 16 12 40 0 58 c4 -20 2 -40 -8 -54 Z"/>
+    <path d="M180 214 c-14 6 -20 20 -18 34 c8 -12 16 -20 26 -24 Z"/>
+    <path d="M332 214 c14 6 20 20 18 34 c-8 -12 -16 -20 -26 -24 Z"/>
+  </g>
+
+  <!-- eyes -->
+  <g>
+    <path d="M196 268 q18 -20 42 -6 q-14 22 -42 6 Z" fill="#ff2e43"/>
+    <path d="M316 268 q-18 -20 -42 -6 q14 22 42 6 Z" fill="#ff2e43"/>
+    <circle cx="218" cy="266" r="7" fill="#40060e"/>
+    <circle cx="294" cy="266" r="7" fill="#40060e"/>
+  </g>
+
+  <!-- muzzle: nose + mouth -->
+  <path d="M256 316 l-20 18 q20 16 40 0 Z" fill="#ff5566"/>
+  <path d="M256 334 l0 22 M256 356 q-16 12 -30 4 M256 356 q16 12 30 4"
+        fill="none" stroke="#17181c" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- whiskers -->
+  <g fill="none" stroke="#17181c" stroke-width="3.5" stroke-linecap="round" opacity="0.85">
+    <path d="M232 344 L150 338"/>
+    <path d="M232 356 L156 366"/>
+    <path d="M280 344 L362 338"/>
+    <path d="M280 356 L356 366"/>
+  </g>
+</svg>

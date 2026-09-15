@@ -41,8 +41,15 @@ function LoginForm() {
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4">
       <div className="animate-fade-up">
-        <div className="mb-5 flex items-center gap-2">
-          <span className="h-5 w-1.5 rounded-pill bg-accent shadow-glow" />
+        <div className="mb-5 flex items-center gap-3">
+          <span className="block h-11 w-11 overflow-hidden rounded-[10px] shadow-glow">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/china/icons/icon-192.png"
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </span>
           <span className="text-meta uppercase tracking-[0.2em] text-muted">
             Private
           </span>
