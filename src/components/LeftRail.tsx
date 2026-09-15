@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import { MiniConverter } from "@/components/MiniConverter";
 import type { Category, Collection } from "@/lib/types";
 
 // Left rail: browse straight to a collection or category from anywhere.
@@ -75,6 +76,11 @@ export function LeftRail() {
             <p className="text-meta text-muted">None yet</p>
           )}
         </div>
+      </section>
+
+      <section>
+        <RailLabel>Convert</RailLabel>
+        <MiniConverter />
       </section>
     </div>
   );
