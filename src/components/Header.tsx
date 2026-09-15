@@ -32,6 +32,12 @@ export function Header() {
           >
             Search
           </Link>
+          <Link
+            href="/convert"
+            className="rounded-card px-2 py-1.5 text-muted transition-colors hover:text-ink"
+          >
+            Convert
+          </Link>
           <Link href="/items/new" className="btn-accent px-3 py-1.5 text-meta">
             + Add item
           </Link>
