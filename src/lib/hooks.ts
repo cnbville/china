@@ -44,10 +44,13 @@ export function useLiveData<T>(fetcher: Fetcher<T>) {
     document.addEventListener("visibilitychange", onVisible);
 
     // 2. Realtime: any change to items or sources refetches. Cheap, and keeps an
-    //    open tab live when working across both devices at once.
+    //    open tab live when working across both devices at once. The channel name
+    //    must be UNIQUE per hook instance — several useLiveData mounts can coexist
+    //    on one page (centre + rails), and duplicate channel topics throw.
     const supabase = createClient();
+    const channelName = `catalog-changes-${Math.random().toString(36).slice(2)}`;
     const channel = supabase
-      .channel("catalog-changes")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "items" },
