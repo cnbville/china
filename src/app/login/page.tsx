@@ -47,7 +47,7 @@ function LoginForm() {
             Private
           </span>
         </div>
-        <h1 className="font-serif text-5xl leading-[1.05]">Sourcing Catalog</h1>
+        <h1 className="font-serif text-5xl leading-[1.05]">Personal Catalog</h1>
         <p className="mt-3 text-body text-muted">
           Every factory link for every piece, in one place.
         </p>

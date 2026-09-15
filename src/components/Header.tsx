@@ -22,12 +22,12 @@ export function Header() {
           <span className="relative flex h-7 w-7 items-center justify-center">
             <span className="absolute inset-0 rounded-[7px] bg-accent shadow-glow transition-transform group-hover:scale-105" />
             <span className="relative font-serif text-lg leading-none text-white">
-              s
+              p
             </span>
           </span>
           <span className="flex flex-col leading-none">
             <span className="font-serif text-xl tracking-tightish">
-              Sourcing Catalog
+              Personal Catalog
             </span>
             <span className="mt-0.5 text-[10px] uppercase tracking-[0.28em] text-muted">
               Private
