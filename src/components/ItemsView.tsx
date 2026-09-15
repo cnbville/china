@@ -53,17 +53,58 @@ const emptyFilters: FilterState = {
   priceMax: "",
 };
 
+type SortKey =
+  | "newest"
+  | "oldest"
+  | "price-asc"
+  | "price-desc"
+  | "links"
+  | "title";
+
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: "newest", label: "Newest" },
+  { key: "oldest", label: "Oldest" },
+  { key: "price-asc", label: "Price ↑" },
+  { key: "price-desc", label: "Price ↓" },
+  { key: "links", label: "Most links" },
+  { key: "title", label: "Title A–Z" },
+];
+
+function sortItems(items: ItemCard[], key: SortKey): ItemCard[] {
+  const out = [...items];
+  const price = (i: ItemCard) => i.lead_price ?? null;
+  switch (key) {
+    case "newest":
+      return out.sort((a, b) => b.created_at.localeCompare(a.created_at));
+    case "oldest":
+      return out.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    case "price-asc":
+      return out.sort(
+        (a, b) => (price(a) ?? Infinity) - (price(b) ?? Infinity),
+      );
+    case "price-desc":
+      return out.sort(
+        (a, b) => (price(b) ?? -Infinity) - (price(a) ?? -Infinity),
+      );
+    case "links":
+      return out.sort((a, b) => b.source_count - a.source_count);
+    case "title":
+      return out.sort((a, b) => a.title.localeCompare(b.title));
+  }
+}
+
 export function ItemsView({ scope }: { scope: Scope }) {
   const [filters, setFilters] = useState<FilterState>({
     ...emptyFilters,
     collection: scope.kind === "category" ? (scope.collection ?? "") : "",
   });
   const [view, setView] = useState<"grid" | "list">("grid");
+  const [sort, setSort] = useState<SortKey>("newest");
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   // Category-only: whether to include items that are filed in a collection.
   const [includeFiled, setIncludeFiled] = useState(true);
 
-  const { data, loading, error } = useLiveData<Data>(async () => {
+  const { data, loading, error, refetch } = useLiveData<Data>(async () => {
     const supabase = createClient();
 
     let q = supabase.from("item_cards").select("*");
@@ -199,16 +240,25 @@ export function ItemsView({ scope }: { scope: Scope }) {
     });
   }, [data, filters, includeFiled, scope.kind, showCollectionFilter]);
 
+  const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort]);
+
   useEffect(() => {
-    if (filtered.length === 0) return;
+    if (sorted.length === 0) return;
     const supabase = createClient();
     getSignedUrls(
       supabase,
-      filtered.map((i) => i.thumb_path),
+      sorted.map((i) => i.thumb_path),
     )
       .then(setThumbs)
       .catch(() => {});
-  }, [filtered]);
+  }, [sorted]);
+
+  // Quick Like/Want toggle straight from a card.
+  async function toggle(item: ItemCard, field: "liked" | "wanted", next: boolean) {
+    const supabase = createClient();
+    await supabase.from("items").update({ [field]: next }).eq("id", item.id);
+    refetch();
+  }
 
   return (
     <div>
@@ -244,6 +294,19 @@ export function ItemsView({ scope }: { scope: Scope }) {
 
       {/* Filters */}
       <div className="mt-5 flex flex-wrap items-center gap-2 text-meta">
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortKey)}
+          className="rounded-card border border-line bg-card px-2 py-1"
+          title="Sort"
+        >
+          {SORT_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
         <select
           value={filters.type}
           onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
@@ -358,7 +421,12 @@ export function ItemsView({ scope }: { scope: Scope }) {
           <p className="mt-4 text-meta text-muted tnum">
             {filtered.length} of {data.items.length}
           </p>
-          <ItemGrid items={filtered} thumbs={thumbs} view={view} />
+          <ItemGrid
+            items={sorted}
+            thumbs={thumbs}
+            view={view}
+            onToggle={toggle}
+          />
           {data.items.length === 0 && (
             <p className="mt-6 text-meta text-muted">
               {emptyHint(scope)}
