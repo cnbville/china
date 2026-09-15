@@ -2,20 +2,27 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { CollectionCategories } from "@/components/CollectionCategories";
+import { Header } from "@/components/Header";
+import { ItemsView } from "@/components/ItemsView";
+import { CollectionsList } from "@/components/CollectionsList";
 
-// Collection view (its categories), addressed by ?id=…
-function CollectionPageInner() {
+function CollectionsInner() {
   const id = useSearchParams().get("id");
-  if (!id)
-    return <p className="p-8 text-meta text-muted">No collection selected.</p>;
-  return <CollectionCategories collectionId={id} />;
+  // With ?id → that collection's items; without → the list of collections.
+  return id ? (
+    <ItemsView scope={{ kind: "collection", id }} />
+  ) : (
+    <CollectionsList />
+  );
 }
 
-export default function CollectionPage() {
+export default function CollectionsPage() {
   return (
-    <Suspense>
-      <CollectionPageInner />
-    </Suspense>
+    <>
+      <Header />
+      <Suspense>
+        <CollectionsInner />
+      </Suspense>
+    </>
   );
 }
