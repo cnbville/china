@@ -137,7 +137,7 @@ export default function AddItemPage() {
 
       // Success: drop the draft and go to the new item.
       localStorage.removeItem(DRAFT_KEY);
-      router.replace(`/items/${itemId}`);
+      router.replace(`/items?id=${itemId}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save item.");
