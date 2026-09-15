@@ -17,7 +17,7 @@ const instrumentSerif = Instrument_Serif({
 });
 
 export const metadata: Metadata = {
-  title: "Sourcing Catalog",
+  title: "Personal Catalog",
   description: "A private catalog for tracking garments and their sources.",
 };
 
