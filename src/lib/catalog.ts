@@ -55,6 +55,40 @@ export async function listCollections(
   return data ?? [];
 }
 
+/**
+ * Rename a collection. Trims and rejects an empty name. Returns the new name so
+ * callers can reflect it without a refetch.
+ */
+export async function renameCollection(
+  supabase: SupabaseClient,
+  id: string,
+  name: string,
+): Promise<string> {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error("A collection needs a name.");
+  const { error } = await supabase
+    .from("collections")
+    .update({ name: trimmed })
+    .eq("id", id);
+  if (error) throw error;
+  return trimmed;
+}
+
+/**
+ * Delete a collection. Its items are NOT deleted — the `on delete set null` FK
+ * unfiles them, so they return to the main feed. Also clears any notepad note
+ * scoped to this collection so it doesn't linger as an orphan.
+ */
+export async function deleteCollection(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await supabase.from("collections").delete().eq("id", id);
+  if (error) throw error;
+  // Best-effort: drop the collection-scoped note (no-op if none exists).
+  await supabase.from("notes").delete().eq("key", `collection:${id}`);
+}
+
 export async function listCategories(
   supabase: SupabaseClient,
 ): Promise<Category[]> {

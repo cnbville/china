@@ -20,12 +20,15 @@ export function ItemGrid({
   thumbs,
   view,
   onToggle,
+  onDelete,
 }: {
   items: ItemCard[];
   thumbs: Record<string, string>;
   view: "grid" | "list";
   // When provided, cards show interactive Like/Want toggles.
   onToggle?: (item: ItemCard, field: ToggleField, next: boolean) => void;
+  // When provided, cards show a delete (trash) button.
+  onDelete?: (item: ItemCard) => void;
 }) {
   if (items.length === 0) {
     return <p className="mt-6 text-meta text-muted">Nothing here.</p>;
@@ -54,8 +57,9 @@ export function ItemGrid({
                 <div className="truncate text-body">{item.title}</div>
                 <Summary item={item} />
               </div>
-              <div className="ml-auto">
+              <div className="ml-auto flex items-center gap-1">
                 <QuickToggles item={item} onToggle={onToggle} />
+                {onDelete && <DeleteBtn item={item} onDelete={onDelete} />}
               </div>
             </Link>
           </li>
@@ -86,6 +90,11 @@ export function ItemGrid({
             <div className="absolute right-2 top-2">
               <QuickToggles item={item} onToggle={onToggle} />
             </div>
+            {onDelete && (
+              <div className="absolute left-2 top-2">
+                <DeleteBtn item={item} onDelete={onDelete} />
+              </div>
+            )}
           </div>
           <div className="p-3">
             <div className="truncate text-body">{item.title}</div>
@@ -203,6 +212,42 @@ function ToggleBtn({
         strokeLinejoin="round"
       >
         {children}
+      </svg>
+    </button>
+  );
+}
+
+// Delete an item straight from the grid. Confirmed by the caller — losing an
+// item and all its links isn't cheap (plan section 6).
+function DeleteBtn({
+  item,
+  onDelete,
+}: {
+  item: ItemCard;
+  onDelete: (item: ItemCard) => void;
+}) {
+  return (
+    <button
+      type="button"
+      title="Delete item"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onDelete(item);
+      }}
+      className="rounded-full border border-white/10 bg-black/45 p-1.5 text-white/60 backdrop-blur transition-colors hover:bg-accent hover:text-white"
+    >
+      <span className="sr-only">Delete</span>
+      <svg
+        viewBox="0 0 24 24"
+        className="h-3.5 w-3.5"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6M10 11v6M14 11v6" />
       </svg>
     </button>
   );

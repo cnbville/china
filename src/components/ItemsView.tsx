@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ItemGrid } from "@/components/ItemGrid";
 import { CatalogNav } from "@/components/CatalogNav";
 import Link from "next/link";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import {
+  deleteItemFully,
+  deleteCollection,
+  renameCollection,
+} from "@/lib/catalog";
 import { getSignedUrls } from "@/lib/signedUrls";
 import type { Category, Collection, ItemCard } from "@/lib/types";
 
@@ -94,6 +100,7 @@ function sortItems(items: ItemCard[], key: SortKey): ItemCard[] {
 }
 
 export function ItemsView({ scope }: { scope: Scope }) {
+  const router = useRouter();
   const [filters, setFilters] = useState<FilterState>({
     ...emptyFilters,
     collection: scope.kind === "category" ? (scope.collection ?? "") : "",
@@ -103,6 +110,10 @@ export function ItemsView({ scope }: { scope: Scope }) {
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   // Category-only: whether to include items that are filed in a collection.
   const [includeFiled, setIncludeFiled] = useState(true);
+  // Collection scope: inline rename + busy state for collection actions.
+  const [renaming, setRenaming] = useState(false);
+  const [rename, setRename] = useState("");
+  const [collBusy, setCollBusy] = useState(false);
 
   const { data, loading, error, refetch } = useLiveData<Data>(async () => {
     const supabase = createClient();
@@ -260,35 +271,142 @@ export function ItemsView({ scope }: { scope: Scope }) {
     refetch();
   }
 
+  // Delete an item (and its links + photos) straight from the grid.
+  async function remove(item: ItemCard) {
+    if (
+      !confirm(
+        `Delete “${item.title}” and all its links? This can’t be undone.`,
+      )
+    )
+      return;
+    try {
+      await deleteItemFully(createClient(), item);
+      refetch();
+    } catch (e) {
+      alert(`Couldn’t delete: ${(e as Error).message}`);
+    }
+  }
+
+  // Rename the collection currently in scope.
+  async function saveRename() {
+    if (scope.kind !== "collection") return;
+    const next = rename.trim();
+    if (!next) return;
+    setCollBusy(true);
+    try {
+      await renameCollection(createClient(), scope.id, next);
+      setRenaming(false);
+      refetch();
+    } catch (e) {
+      alert(`Couldn’t rename: ${(e as Error).message}`);
+    } finally {
+      setCollBusy(false);
+    }
+  }
+
+  // Delete the collection in scope. Items are unfiled (returned to the feed),
+  // not deleted.
+  async function removeCollection() {
+    if (scope.kind !== "collection") return;
+    const n = data?.items.length ?? 0;
+    if (
+      !confirm(
+        `Delete this collection?\n\n` +
+          (n > 0
+            ? `Its ${n} item${n === 1 ? "" : "s"} will return to your main feed — they won’t be deleted.`
+            : `It’s empty, so nothing else changes.`),
+      )
+    )
+      return;
+    setCollBusy(true);
+    try {
+      await deleteCollection(createClient(), scope.id);
+      router.replace("/collections");
+    } catch (e) {
+      alert(`Couldn’t delete collection: ${(e as Error).message}`);
+      setCollBusy(false);
+    }
+  }
+
   return (
     <div>
       <CatalogNav />
 
       <div className="mt-6 flex items-end justify-between gap-4">
-        <div>
+        <div className="min-w-0">
           <div className="mb-1 flex items-center gap-2">
             <span className="h-3 w-1.5 rounded-pill bg-accent shadow-glow" />
             <span className="text-meta uppercase tracking-[0.2em] text-muted">
               {data?.kicker ?? ""}
             </span>
           </div>
-          <h1 className="font-serif text-4xl leading-tight">
-            {data?.title ?? "…"}
-          </h1>
+          {scope.kind === "collection" && renaming ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                autoFocus
+                value={rename}
+                onChange={(e) => setRename(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveRename();
+                  if (e.key === "Escape") setRenaming(false);
+                }}
+                className="input max-w-xs font-serif text-3xl"
+              />
+              <button
+                onClick={saveRename}
+                disabled={collBusy}
+                className="btn-accent disabled:opacity-50"
+              >
+                Save
+              </button>
+              <button
+                onClick={() => setRenaming(false)}
+                className="btn-ghost"
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <h1 className="truncate font-serif text-4xl leading-tight">
+              {data?.title ?? "…"}
+            </h1>
+          )}
         </div>
-        <div className="flex items-center gap-1 rounded-pill border border-line bg-card/60 p-1 text-meta">
-          {(["grid", "list"] as const).map((v) => (
-            <button
-              key={v}
-              onClick={() => setView(v)}
-              className={
-                "rounded-pill px-3 py-1 capitalize transition-colors " +
-                (view === v ? "bg-accent text-white" : "text-muted hover:text-ink")
-              }
-            >
-              {v}
-            </button>
-          ))}
+        <div className="flex shrink-0 items-center gap-2">
+          {scope.kind === "collection" && data && !renaming && (
+            <div className="flex items-center gap-1 text-meta">
+              <button
+                onClick={() => {
+                  setRename(data.title);
+                  setRenaming(true);
+                }}
+                className="rounded-pill border border-line bg-card/60 px-3 py-1.5 text-muted transition-colors hover:border-accent/60 hover:text-ink"
+              >
+                Rename
+              </button>
+              <button
+                onClick={removeCollection}
+                disabled={collBusy}
+                className="rounded-pill border border-line bg-card/60 px-3 py-1.5 text-muted transition-colors hover:border-accent hover:text-accentSoft disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+          <div className="flex items-center gap-1 rounded-pill border border-line bg-card/60 p-1 text-meta">
+            {(["grid", "list"] as const).map((v) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                className={
+                  "rounded-pill px-3 py-1 capitalize transition-colors " +
+                  (view === v ? "bg-accent text-white" : "text-muted hover:text-ink")
+                }
+              >
+                {v}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -426,6 +544,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
             thumbs={thumbs}
             view={view}
             onToggle={toggle}
+            onDelete={remove}
           />
           {data.items.length === 0 && (
             <p className="mt-6 text-meta text-muted">
