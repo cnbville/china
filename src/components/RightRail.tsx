@@ -3,6 +3,7 @@
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
 import { useRates } from "@/components/PriceHint";
+import { MiniConverter } from "@/components/MiniConverter";
 import { convert } from "@/lib/fx";
 
 // Right rail: an at-a-glance pulse of the catalog + today's rates.
@@ -54,6 +55,11 @@ export function RightRail() {
           />
           <Stat n={data?.wanted} label="wanted" />
         </div>
+      </section>
+
+      <section>
+        <RailLabel>Convert</RailLabel>
+        <MiniConverter />
       </section>
 
       <section>
