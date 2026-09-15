@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { SourceFields } from "@/components/SourceFields";
+import { PriceHint } from "@/components/PriceHint";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
 import { getSignedUrl } from "@/lib/signedUrls";
@@ -533,8 +534,11 @@ function SourceRow({
           <span className="truncate text-body">
             {source.seller_name || "(unnamed seller)"}
           </span>
-          <span className="ml-auto whitespace-nowrap text-body tnum">
+          <span className="ml-auto whitespace-nowrap text-right text-body tnum">
             {source.price != null ? `¥${formatPrice(source.price)}` : "—"}
+            {source.price != null && (
+              <PriceHint cny={source.price} className="block text-[11px]" />
+            )}
           </span>
         </div>
 

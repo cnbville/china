@@ -87,11 +87,24 @@ async function fromErApi(): Promise<FxData> {
  * a fallback source), and falls back to a stale cache / offline estimate if the
  * network fails. `force` bypasses the freshness check (manual refresh).
  */
+let inFlight: Promise<FxData> | null = null;
+
 export async function getRates(force = false): Promise<FxData> {
   const cached = readCache();
   if (!force && cached && Date.now() - cached.fetchedAt < MAX_AGE_MS) {
     return cached;
   }
+  // De-dupe concurrent callers (e.g. many price hints on one page) into one fetch.
+  if (!force && inFlight) return inFlight;
+  inFlight = doFetch(cached);
+  try {
+    return await inFlight;
+  } finally {
+    inFlight = null;
+  }
+}
+
+async function doFetch(cached: FxData | null): Promise<FxData> {
 
   for (const src of [fromFrankfurter, fromErApi]) {
     try {
