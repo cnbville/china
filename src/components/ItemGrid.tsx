@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ItemCard } from "@/lib/types";
+import { PriceHint } from "@/components/PriceHint";
 
 // The rolled-up summary comes from an item's sources (plan section 5):
 //   from ¥27 · 3 links · 14 colors  — price is the TOP-RANKED source's price
@@ -115,6 +116,9 @@ function Summary({ item }: { item: ItemCard }) {
       <span>
         {item.color_count} {item.color_count === 1 ? "color" : "colors"}
       </span>
+      {item.lead_price != null && (
+        <PriceHint cny={item.lead_price} className="w-full text-[11px]" />
+      )}
     </div>
   );
 }
