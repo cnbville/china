@@ -19,11 +19,13 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4">
         {/* Brand lockup */}
         <Link href="/" className="group flex items-center gap-2.5">
-          <span className="relative flex h-7 w-7 items-center justify-center">
-            <span className="absolute inset-0 rounded-[7px] bg-accent shadow-glow transition-transform group-hover:scale-105" />
-            <span className="relative font-serif text-lg leading-none text-white">
-              p
-            </span>
+          <span className="relative block h-8 w-8 overflow-hidden rounded-[8px] shadow-glow transition-transform group-hover:scale-105">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/china/icons/icon-192.png"
+              alt=""
+              className="h-full w-full object-cover"
+            />
           </span>
           <span className="flex flex-col leading-none">
             <span className="font-serif text-xl tracking-tightish">
