@@ -71,6 +71,14 @@ export function CollectionNotepad() {
 
   const key = sel === "general" ? "general" : `collection:${sel}`;
   const remaining = items.filter((i) => !i.done).length;
+  // Display order: unchecked first, checked sink to the bottom. Stable within
+  // each group, so items don't shuffle beyond the check that moved them.
+  const ordered = useMemo(
+    () => items.map((i, idx) => ({ i, idx }))
+      .sort((a, b) => Number(a.i.done) - Number(b.i.done) || a.idx - b.idx)
+      .map(({ i }) => i),
+    [items],
+  );
 
   useEffect(() => {
     supabase
@@ -198,7 +206,7 @@ export function CollectionNotepad() {
 
         {items.length > 0 && (
           <ul className="mt-1 space-y-0.5 border-t border-line/60 pt-1.5">
-            {items.map((item) => (
+            {ordered.map((item) => (
               <li key={item.id} className="group flex items-center gap-2 px-1">
                 <button
                   type="button"
