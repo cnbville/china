@@ -1,41 +1,27 @@
 "use client";
 
 import Link from "next/link";
-import { useLiveData } from "@/lib/hooks";
-import { createClient } from "@/lib/supabase/client";
+import { useMemo } from "react";
+import { useCatalog } from "@/lib/catalogStore";
 import { CollectionNotepad } from "@/components/CollectionNotepad";
-import type { Category, Collection } from "@/lib/types";
 
 // Left rail: browse straight to a collection or category from anywhere.
-type Data = {
-  collections: (Collection & { count: number })[];
-  categories: Category[];
-};
-
 export function LeftRail() {
-  const { data } = useLiveData<Data>(async () => {
-    const supabase = createClient();
-    const [collRes, catRes, itemsRes] = await Promise.all([
-      supabase.from("collections").select("*").order("name"),
-      supabase.from("categories").select("*").order("name"),
-      supabase.from("items").select("collection_id"),
-    ]);
-    if (collRes.error) throw collRes.error;
-    if (catRes.error) throw catRes.error;
-
+  const { data: catalog } = useCatalog();
+  const data = useMemo(() => {
+    if (!catalog) return null;
     const counts: Record<string, number> = {};
-    for (const row of itemsRes.data ?? [])
-      if (row.collection_id)
-        counts[row.collection_id] = (counts[row.collection_id] ?? 0) + 1;
-
+    for (const i of catalog.items)
+      if (i.collection_id)
+        counts[i.collection_id] = (counts[i.collection_id] ?? 0) + 1;
     return {
-      collections: ((collRes.data ?? []) as Collection[]).map((c) => ({
+      collections: catalog.collections.map((c) => ({
         ...c,
         count: counts[c.id] ?? 0,
       })),
-      categories: (catRes.data ?? []) as Category[],
+      categories: catalog.categories,
     };
-  });
+  }, [catalog]);
 
   return (
     <div className="sticky top-20 space-y-6">

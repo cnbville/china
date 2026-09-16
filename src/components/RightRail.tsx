@@ -1,43 +1,26 @@
 "use client";
 
-import { useLiveData } from "@/lib/hooks";
-import { createClient } from "@/lib/supabase/client";
+import { useMemo } from "react";
+import { useCatalog } from "@/lib/catalogStore";
 import { useRates } from "@/components/PriceHint";
 import { MiniConverter } from "@/components/MiniConverter";
 import { convert } from "@/lib/fx";
 
 // Right rail: an at-a-glance pulse of the catalog + today's rates.
-type Stats = {
-  items: number;
-  links: number;
-  wanted: number;
-  cheapest: number | null;
-};
-
 export function RightRail() {
-  const { data } = useLiveData<Stats>(async () => {
-    const supabase = createClient();
-    const [cardsRes, linksRes] = await Promise.all([
-      supabase.from("item_cards").select("wanted, lead_price"),
-      supabase.from("sources").select("id", { count: "exact", head: true }),
-    ]);
-    if (cardsRes.error) throw cardsRes.error;
-
-    const rows = (cardsRes.data ?? []) as {
-      wanted: boolean;
-      lead_price: number | null;
-    }[];
-    const prices = rows
-      .map((r) => r.lead_price)
+  const { data: catalog } = useCatalog();
+  const data = useMemo(() => {
+    if (!catalog) return null;
+    const prices = catalog.items
+      .map((i) => i.lead_price)
       .filter((p): p is number => p != null);
-
     return {
-      items: rows.length,
-      links: linksRes.count ?? 0,
-      wanted: rows.filter((r) => r.wanted).length,
+      items: catalog.items.length,
+      links: catalog.items.reduce((n, i) => n + i.source_count, 0),
+      wanted: catalog.items.filter((i) => i.wanted).length,
       cheapest: prices.length ? Math.min(...prices) : null,
     };
-  });
+  }, [catalog]);
 
   const rates = useRates();
 

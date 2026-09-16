@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { ItemGrid } from "@/components/ItemGrid";
 import { CatalogNav } from "@/components/CatalogNav";
 import Link from "next/link";
-import { useLiveData } from "@/lib/hooks";
+import {
+  useCatalog,
+  patchItemLocal,
+  removeItemLocal,
+  refreshCatalog,
+} from "@/lib/catalogStore";
 import { createClient } from "@/lib/supabase/client";
 import {
   deleteItemFully,
@@ -13,7 +18,7 @@ import {
   renameCollection,
 } from "@/lib/catalog";
 import { getSignedUrls } from "@/lib/signedUrls";
-import type { Category, Collection, ItemCard } from "@/lib/types";
+import type { ItemCard } from "@/lib/types";
 
 // One reusable "grid of items" screen. Every browse route points at it with a
 // different scope, so the feed, a collection, a category, All / Wanted / Liked
@@ -25,17 +30,6 @@ export type Scope =
   | { kind: "liked" }
   | { kind: "collection"; id: string }
   | { kind: "category"; id: string; collection?: string };
-
-type SourceBit = { item_id: string; colors: string[]; rank: number | null };
-
-type Data = {
-  title: string;
-  kicker: string;
-  items: ItemCard[];
-  sourcesByItem: Record<string, SourceBit[]>;
-  collections: Collection[];
-  categories: Category[];
-};
 
 type FilterState = {
   type: string;
@@ -115,99 +109,70 @@ export function ItemsView({ scope }: { scope: Scope }) {
   const [rename, setRename] = useState("");
   const [collBusy, setCollBusy] = useState(false);
 
-  const { data, loading, error, refetch } = useLiveData<Data>(async () => {
-    const supabase = createClient();
+  // One shared, cached copy of the whole catalog. Switching scope filters it in
+  // memory — no network round-trip per view.
+  const { data, loading, error, refetch } = useCatalog();
 
-    let q = supabase.from("item_cards").select("*");
-    let title = "";
-    let kicker = "";
-
+  // The items belonging to this scope (feed / collection / category / etc.).
+  const scoped = useMemo(() => {
+    if (!data) return [] as ItemCard[];
     switch (scope.kind) {
       case "unfiled":
-        q = q.is("collection_id", null);
-        title = "Your library";
-        kicker = "Not in a collection";
-        break;
+        return data.items.filter((i) => i.collection_id == null);
       case "all":
-        title = "All items";
-        kicker = "Everything";
-        break;
+        return data.items;
       case "wanted":
-        q = q.eq("wanted", true);
-        title = "Wanted";
-        kicker = "Shortlist";
-        break;
+        return data.items.filter((i) => i.wanted);
       case "liked":
-        q = q.eq("liked", true);
-        title = "Liked";
-        kicker = "Shortlist";
-        break;
+        return data.items.filter((i) => i.liked);
       case "collection":
-        q = q.eq("collection_id", scope.id);
-        kicker = "Collection";
-        break;
+        return data.items.filter((i) => i.collection_id === scope.id);
       case "category":
-        q = q.eq("category_id", scope.id);
-        kicker = "Category";
-        break;
+        return data.items.filter((i) => i.category_id === scope.id);
     }
+  }, [data, scope]);
 
-    const [itemsRes, collectionsRes, categoriesRes] = await Promise.all([
-      q.order("created_at", { ascending: false }),
-      supabase.from("collections").select("*").order("name"),
-      supabase.from("categories").select("*").order("name"),
-    ]);
-    if (itemsRes.error) throw itemsRes.error;
-
-    const items = (itemsRes.data ?? []) as ItemCard[];
-    const collections = (collectionsRes.data ?? []) as Collection[];
-    const categories = (categoriesRes.data ?? []) as Category[];
-
-    // Resolve the display name for collection / category scopes.
-    if (scope.kind === "collection") {
-      const { data: c } = await supabase
-        .from("collections")
-        .select("name")
-        .eq("id", scope.id)
-        .single();
-      title = c?.name ?? "Collection";
-    } else if (scope.kind === "category") {
-      const { data: c } = await supabase
-        .from("categories")
-        .select("name")
-        .eq("id", scope.id)
-        .single();
-      title = c?.name ?? "Category";
+  const { title, kicker } = useMemo(() => {
+    switch (scope.kind) {
+      case "unfiled":
+        return { title: "Your library", kicker: "Not in a collection" };
+      case "all":
+        return { title: "All items", kicker: "Everything" };
+      case "wanted":
+        return { title: "Wanted", kicker: "Shortlist" };
+      case "liked":
+        return { title: "Liked", kicker: "Shortlist" };
+      case "collection":
+        return {
+          title:
+            data?.collections.find((c) => c.id === scope.id)?.name ??
+            "Collection",
+          kicker: "Collection",
+        };
+      case "category":
+        return {
+          title:
+            data?.categories.find((c) => c.id === scope.id)?.name ?? "Category",
+          kicker: "Category",
+        };
     }
+  }, [scope, data]);
 
-    let sourcesByItem: Record<string, SourceBit[]> = {};
-    const ids = items.map((i) => i.id);
-    if (ids.length > 0) {
-      const srcRes = await supabase
-        .from("sources")
-        .select("item_id, colors, rank")
-        .in("item_id", ids);
-      if (srcRes.error) throw srcRes.error;
-      for (const s of (srcRes.data ?? []) as SourceBit[]) {
-        (sourcesByItem[s.item_id] ??= []).push(s);
-      }
-    }
-
-    return { title, kicker, items, sourcesByItem, collections, categories };
-  }, [scope.kind, "id" in scope ? scope.id : "", scope.kind === "category" ? (scope.collection ?? "") : ""]);
-
-  // Distinct types + colors present, for the dropdowns.
+  // Distinct types + colors present in this scope, for the dropdowns.
   const { types, colors } = useMemo(() => {
     const t = new Set<string>();
     const c = new Set<string>();
-    for (const item of data?.items ?? []) if (item.type) t.add(item.type);
-    for (const bits of Object.values(data?.sourcesByItem ?? {}))
-      for (const s of bits) for (const col of s.colors) c.add(col);
+    const bitsFor = data?.sourcesByItem ?? {};
+    for (const item of scoped) {
+      if (item.type) t.add(item.type);
+      for (const s of bitsFor[item.id] ?? [])
+        for (const col of s.colors) c.add(col);
+    }
     return {
       types: Array.from(t).sort(),
       colors: Array.from(c).sort((a, b) => a.localeCompare(b)),
     };
-  }, [data]);
+  }, [scoped, data]);
 
   const showCollectionFilter =
     scope.kind === "all" ||
@@ -219,7 +184,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
     if (!data) return [];
     const min = filters.priceMin.trim() === "" ? null : Number(filters.priceMin);
     const max = filters.priceMax.trim() === "" ? null : Number(filters.priceMax);
-    return data.items.filter((item) => {
+    return scoped.filter((item) => {
       if (scope.kind === "category" && !includeFiled && item.collection_id)
         return false;
       if (filters.type && item.type !== filters.type) return false;
@@ -249,7 +214,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
       }
       return true;
     });
-  }, [data, filters, includeFiled, scope.kind, showCollectionFilter]);
+  }, [data, scoped, filters, includeFiled, scope.kind, showCollectionFilter]);
 
   const sorted = useMemo(() => sortItems(filtered, sort), [filtered, sort]);
 
@@ -264,11 +229,16 @@ export function ItemsView({ scope }: { scope: Scope }) {
       .catch(() => {});
   }, [sorted]);
 
-  // Quick Like/Want toggle straight from a card.
+  // Quick Like/Want toggle straight from a card. Optimistic: flip the cached
+  // item immediately, then persist.
   async function toggle(item: ItemCard, field: "liked" | "wanted", next: boolean) {
+    patchItemLocal(item.id, { [field]: next });
     const supabase = createClient();
-    await supabase.from("items").update({ [field]: next }).eq("id", item.id);
-    refetch();
+    const { error } = await supabase
+      .from("items")
+      .update({ [field]: next })
+      .eq("id", item.id);
+    if (error) refetch(); // reload the truth if the write failed
   }
 
   // Delete an item (and its links + photos) straight from the grid.
@@ -281,7 +251,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
       return;
     try {
       await deleteItemFully(createClient(), item);
-      refetch();
+      removeItemLocal(item.id); // drop from the grid immediately
     } catch (e) {
       alert(`Couldn’t delete: ${(e as Error).message}`);
     }
@@ -308,7 +278,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
   // not deleted.
   async function removeCollection() {
     if (scope.kind !== "collection") return;
-    const n = data?.items.length ?? 0;
+    const n = scoped.length;
     if (
       !confirm(
         `Delete this collection?\n\n` +
@@ -321,6 +291,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
     setCollBusy(true);
     try {
       await deleteCollection(createClient(), scope.id);
+      refreshCatalog();
       router.replace("/collections");
     } catch (e) {
       alert(`Couldn’t delete collection: ${(e as Error).message}`);
@@ -337,7 +308,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
           <div className="mb-1 flex items-center gap-2">
             <span className="h-3 w-1.5 rounded-pill bg-accent shadow-glow" />
             <span className="text-meta uppercase tracking-[0.2em] text-muted">
-              {data?.kicker ?? ""}
+              {kicker}
             </span>
           </div>
           {scope.kind === "collection" && renaming ? (
@@ -368,7 +339,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
             </div>
           ) : (
             <h1 className="truncate font-serif text-4xl leading-tight">
-              {data?.title ?? "…"}
+              {data ? title : "…"}
             </h1>
           )}
         </div>
@@ -377,7 +348,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
             <div className="flex items-center gap-1 text-meta">
               <button
                 onClick={() => {
-                  setRename(data.title);
+                  setRename(title);
                   setRenaming(true);
                 }}
                 className="rounded-pill border border-line bg-card/60 px-3 py-1.5 text-muted transition-colors hover:border-accent/60 hover:text-ink"
@@ -537,7 +508,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
       {data && (
         <>
           <p className="mt-4 text-meta text-muted tnum">
-            {filtered.length} of {data.items.length}
+            {filtered.length} of {scoped.length}
           </p>
           <ItemGrid
             items={sorted}
@@ -546,7 +517,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
             onToggle={toggle}
             onDelete={remove}
           />
-          {data.items.length === 0 && (
+          {scoped.length === 0 && (
             <p className="mt-6 text-meta text-muted">
               {emptyHint(scope)}
             </p>
