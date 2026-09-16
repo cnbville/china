@@ -11,7 +11,15 @@ import { createClient } from "@/lib/supabase/client";
 
 type Fetcher<T> = () => Promise<T>;
 
-export function useLiveData<T>(fetcher: Fetcher<T>) {
+/**
+ * Fetch + keep-fresh helper.
+ *
+ * `deps` are the fetch inputs (e.g. the current scope / id). When they change we
+ * refetch immediately — this is what makes navigating collection A → collection
+ * B (same component, only a query param changes) actually load B instead of
+ * sitting on A's data until some unrelated event fires.
+ */
+export function useLiveData<T>(fetcher: Fetcher<T>, deps: unknown[] = []) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,9 +40,15 @@ export function useLiveData<T>(fetcher: Fetcher<T>) {
     }
   }, []);
 
+  // Initial load + whenever the fetch inputs change.
+  const depsKey = JSON.stringify(deps);
   useEffect(() => {
     refetch();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetch, depsKey]);
 
+  // Live updates, set up once per mount (not per navigation).
+  useEffect(() => {
     // 1. Refetch when the tab regains focus / becomes visible.
     const onFocus = () => refetch();
     const onVisible = () => {
