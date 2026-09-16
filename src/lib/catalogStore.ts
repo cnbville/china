@@ -29,6 +29,7 @@ export type CatalogData = {
 let cache: CatalogData | null = null;
 let lastError: string | null = null;
 let inFlight: Promise<void> | null = null;
+let dirty = false; // a live change arrived while a fetch was in flight
 let subscribed = false;
 const listeners = new Set<() => void>();
 
@@ -63,9 +64,14 @@ async function fetchAll(): Promise<CatalogData> {
   };
 }
 
-/** Reload the whole catalog. Concurrent callers share one in-flight fetch. */
-export function refreshCatalog(): Promise<void> {
-  if (inFlight) return inFlight;
+// Core loader. Concurrent callers share one in-flight fetch. `captureLatest`
+// (used by live triggers) forces one more fetch afterwards if a change landed
+// mid-flight, so a burst of edits never leaves the cache a version behind.
+function run(captureLatest: boolean): Promise<void> {
+  if (inFlight) {
+    if (captureLatest) dirty = true;
+    return inFlight;
+  }
   inFlight = (async () => {
     try {
       cache = await fetchAll();
@@ -75,9 +81,18 @@ export function refreshCatalog(): Promise<void> {
     } finally {
       inFlight = null;
       notify();
+      if (dirty) {
+        dirty = false;
+        run(false);
+      }
     }
   })();
   return inFlight;
+}
+
+/** Reload the whole catalog (coalesces with an in-flight load). */
+export function refreshCatalog(): Promise<void> {
+  return run(false);
 }
 
 // Set up the live-update wiring exactly once for the tab.
@@ -91,18 +106,18 @@ function ensureSubscription() {
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "items" },
-      () => refreshCatalog(),
+      () => run(true),
     )
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "sources" },
-      () => refreshCatalog(),
+      () => run(true),
     )
     .subscribe();
 
-  window.addEventListener("focus", () => refreshCatalog());
+  window.addEventListener("focus", () => run(true));
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") refreshCatalog();
+    if (document.visibilityState === "visible") run(true);
   });
 }
 
