@@ -51,7 +51,7 @@ export function ItemView({ itemId }: { itemId: string }) {
       collections: colls,
       categories: cats,
     };
-  });
+  }, [itemId]);
 
   return (
     <>

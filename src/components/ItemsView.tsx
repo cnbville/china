@@ -194,7 +194,7 @@ export function ItemsView({ scope }: { scope: Scope }) {
     }
 
     return { title, kicker, items, sourcesByItem, collections, categories };
-  });
+  }, [scope.kind, "id" in scope ? scope.id : "", scope.kind === "category" ? (scope.collection ?? "") : ""]);
 
   // Distinct types + colors present, for the dropdowns.
   const { types, colors } = useMemo(() => {
