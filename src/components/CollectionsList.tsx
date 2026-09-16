@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CatalogNav } from "@/components/CatalogNav";
-import { useLiveData } from "@/lib/hooks";
+import { useCatalog } from "@/lib/catalogStore";
 import { createClient } from "@/lib/supabase/client";
 import { deleteCollection, renameCollection } from "@/lib/catalog";
 import type { Collection } from "@/lib/types";
@@ -11,30 +11,22 @@ import type { Collection } from "@/lib/types";
 // Dedicated Collections page: your chosen sets ("Winter", "School"). Opening one
 // shows just that collection's items.
 type WithCount = Collection & { count: number };
-type Data = { collections: WithCount[] };
 
 export function CollectionsList() {
-  const { data, loading, error, refetch } = useLiveData<Data>(async () => {
-    const supabase = createClient();
-    const [collRes, itemsRes] = await Promise.all([
-      supabase.from("collections").select("*").order("name"),
-      supabase.from("items").select("collection_id"),
-    ]);
-    if (collRes.error) throw collRes.error;
-    if (itemsRes.error) throw itemsRes.error;
-
+  const { data: catalog, loading, error, refetch } = useCatalog();
+  const data = useMemo(() => {
+    if (!catalog) return null;
     const counts: Record<string, number> = {};
-    for (const row of itemsRes.data ?? [])
-      if (row.collection_id)
-        counts[row.collection_id] = (counts[row.collection_id] ?? 0) + 1;
-
+    for (const i of catalog.items)
+      if (i.collection_id)
+        counts[i.collection_id] = (counts[i.collection_id] ?? 0) + 1;
     return {
-      collections: ((collRes.data ?? []) as Collection[]).map((c) => ({
+      collections: catalog.collections.map((c) => ({
         ...c,
         count: counts[c.id] ?? 0,
       })),
     };
-  });
+  }, [catalog]);
 
   return (
     <div>
