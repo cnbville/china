@@ -50,3 +50,12 @@ export type ItemCard = Item & {
   source_count: number;
   color_count: number;
 };
+
+// A factory link stashed to review later (migration 0008, the "Later" tab).
+export type SavedLink = {
+  id: string;
+  url: string;
+  title: string | null;
+  note: string | null;
+  created_at: string;
+};
