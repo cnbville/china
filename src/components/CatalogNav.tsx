@@ -12,7 +12,6 @@ const TABS = [
   { href: "/collections", label: "Collections" },
   { href: "/wanted", label: "Wanted" },
   { href: "/liked", label: "Liked" },
-  { href: "/later", label: "Later" },
 ];
 
 function norm(p: string) {

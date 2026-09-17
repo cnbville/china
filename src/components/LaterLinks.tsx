@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { CatalogNav } from "@/components/CatalogNav";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
 import type { SavedLink } from "@/lib/types";
@@ -88,9 +87,7 @@ export function LaterLinks() {
 
   return (
     <div>
-      <CatalogNav />
-
-      <div className="mb-1 mt-6 flex items-center gap-2">
+      <div className="mb-1 mt-2 flex items-center gap-2">
         <span className="h-3 w-1.5 rounded-pill bg-accent shadow-glow" />
         <span className="text-meta uppercase tracking-[0.2em] text-muted">
           To review
