@@ -48,6 +48,13 @@ export function Header() {
           >
             <path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0 3 3m-3-3-3 3" />
           </IconLink>
+          <IconLink
+            href="/later"
+            label="Later — saved links"
+            active={pathname === "/later"}
+          >
+            <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z" />
+          </IconLink>
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
