@@ -51,6 +51,17 @@ export type ItemCard = Item & {
   color_count: number;
 };
 
+// One photo in an item's gallery (migration 0009). The item's cover is whichever
+// of these matches items.photo_path / items.thumb_path.
+export type ItemPhoto = {
+  id: string;
+  item_id: string;
+  photo_path: string;
+  thumb_path: string;
+  position: number;
+  created_at: string;
+};
+
 // A factory link stashed to review later (migration 0008, the "Later" tab).
 export type SavedLink = {
   id: string;
