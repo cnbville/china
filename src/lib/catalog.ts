@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { makeVariants } from "./image";
 import { PHOTOS_BUCKET } from "./constants";
-import type { Category, Collection } from "./types";
+import type { Category, Collection, ItemPhoto } from "./types";
 
 // Find an existing collection/category by name (case-insensitive), or create it.
 // Keeps the single user from accumulating near-duplicate "Hoodies"/"hoodies".
@@ -104,20 +104,109 @@ export async function listCategories(
  * Delete an item and its links. Storage objects are removed FIRST, then the row
  * (plan section 2): a failure then leaves a row with a broken image — visible and
  * fixable — rather than an invisible orphaned file. `on delete cascade` handles
- * the source rows once the item row goes.
+ * the source and item_photos rows once the item row goes; the storage objects
+ * behind every gallery photo (plus the cover) are gathered and removed here.
  */
 export async function deleteItemFully(
   supabase: SupabaseClient,
   item: { id: string; photo_path: string | null; thumb_path: string | null },
 ): Promise<void> {
-  const objects = [item.photo_path, item.thumb_path].filter(
-    (p): p is string => !!p,
-  );
-  if (objects.length > 0) {
-    const { error } = await supabase.storage.from(PHOTOS_BUCKET).remove(objects);
+  const { data: photos } = await supabase
+    .from("item_photos")
+    .select("photo_path, thumb_path")
+    .eq("item_id", item.id);
+
+  const objects = new Set<string>();
+  for (const p of (photos ?? []) as Pick<ItemPhoto, "photo_path" | "thumb_path">[]) {
+    if (p.photo_path) objects.add(p.photo_path);
+    if (p.thumb_path) objects.add(p.thumb_path);
+  }
+  if (item.photo_path) objects.add(item.photo_path);
+  if (item.thumb_path) objects.add(item.thumb_path);
+
+  if (objects.size > 0) {
+    const { error } = await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .remove([...objects]);
     if (error) throw error;
   }
   const { error } = await supabase.from("items").delete().eq("id", item.id);
+  if (error) throw error;
+}
+
+/**
+ * Upload one or more photos and append them to an item's gallery. If the item
+ * has no cover yet, the first uploaded photo becomes the cover.
+ */
+export async function addPhotosToItem(
+  supabase: SupabaseClient,
+  item: { id: string; photo_path: string | null },
+  existingCount: number,
+  files: File[],
+): Promise<void> {
+  const uploaded: UploadedPhoto[] = [];
+  for (const f of files) uploaded.push(await uploadPhoto(supabase, item.id, f));
+
+  const rows = uploaded.map((u, i) => ({
+    item_id: item.id,
+    photo_path: u.photo_path,
+    thumb_path: u.thumb_path,
+    position: existingCount + i,
+  }));
+  const { error } = await supabase.from("item_photos").insert(rows);
+  if (error) throw error;
+
+  if (!item.photo_path && uploaded[0]) {
+    await supabase
+      .from("items")
+      .update({
+        photo_path: uploaded[0].photo_path,
+        thumb_path: uploaded[0].thumb_path,
+      })
+      .eq("id", item.id);
+  }
+}
+
+/** Remove one gallery photo. If it was the cover, promote the next one. */
+export async function removeItemPhoto(
+  supabase: SupabaseClient,
+  item: { id: string; photo_path: string | null },
+  photo: ItemPhoto,
+  gallery: ItemPhoto[],
+): Promise<void> {
+  const objects = [photo.photo_path, photo.thumb_path].filter(Boolean);
+  if (objects.length > 0) {
+    const { error } = await supabase.storage
+      .from(PHOTOS_BUCKET)
+      .remove(objects);
+    if (error) throw error;
+  }
+  const { error } = await supabase.from("item_photos").delete().eq("id", photo.id);
+  if (error) throw error;
+
+  // Was this the cover? Promote the next remaining photo (or clear it).
+  if (item.photo_path === photo.photo_path) {
+    const next = gallery.find((p) => p.id !== photo.id) ?? null;
+    await supabase
+      .from("items")
+      .update({
+        photo_path: next?.photo_path ?? null,
+        thumb_path: next?.thumb_path ?? null,
+      })
+      .eq("id", item.id);
+  }
+}
+
+/** Make an existing gallery photo the item's cover (what grids show). */
+export async function setItemCover(
+  supabase: SupabaseClient,
+  itemId: string,
+  photo: ItemPhoto,
+): Promise<void> {
+  const { error } = await supabase
+    .from("items")
+    .update({ photo_path: photo.photo_path, thumb_path: photo.thumb_path })
+    .eq("id", itemId);
   if (error) throw error;
 }
 

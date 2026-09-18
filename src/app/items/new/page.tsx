@@ -46,7 +46,7 @@ const emptyItemDraft: ItemDraft = {
 
 export default function AddItemPage() {
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [draft, setDraft] = useState<ItemDraft>(emptyItemDraft);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -105,10 +105,10 @@ export default function AddItemPage() {
     const itemId = crypto.randomUUID();
 
     try {
-      let photoPaths: { photo_path: string; thumb_path: string } | null = null;
-      if (file) {
-        photoPaths = await uploadPhoto(supabase, itemId, file);
-      }
+      // Upload every photo first; the first one is the cover.
+      const uploaded: { photo_path: string; thumb_path: string }[] = [];
+      for (const f of files) uploaded.push(await uploadPhoto(supabase, itemId, f));
+      const cover = uploaded[0] ?? null;
 
       const [collection_id, category_id] = await Promise.all([
         resolveCollectionId(supabase, draft.collection),
@@ -125,10 +125,23 @@ export default function AddItemPage() {
         notes: draft.notes.trim() || null,
         liked: draft.liked,
         wanted: draft.wanted,
-        photo_path: photoPaths?.photo_path ?? null,
-        thumb_path: photoPaths?.thumb_path ?? null,
+        photo_path: cover?.photo_path ?? null,
+        thumb_path: cover?.thumb_path ?? null,
       });
       if (itemErr) throw itemErr;
+
+      // Record every uploaded photo in the item's gallery.
+      if (uploaded.length > 0) {
+        const { error: photoErr } = await supabase.from("item_photos").insert(
+          uploaded.map((u, i) => ({
+            item_id: itemId,
+            photo_path: u.photo_path,
+            thumb_path: u.thumb_path,
+            position: i,
+          })),
+        );
+        if (photoErr) throw photoErr;
+      }
 
       const { error: srcErr } = await supabase
         .from("sources")
@@ -152,7 +165,7 @@ export default function AddItemPage() {
         <h1 className="font-serif text-3xl">Add item</h1>
 
         <form onSubmit={onSubmit} className="mt-6 space-y-8">
-          <PhotoInput file={file} onFile={setFile} />
+          <PhotoInput files={files} onFiles={setFiles} />
 
           <section className="space-y-4">
             <div>
@@ -274,7 +287,7 @@ export default function AddItemPage() {
               onClick={() => {
                 localStorage.removeItem(DRAFT_KEY);
                 setDraft(emptyItemDraft);
-                setFile(null);
+                setFiles([]);
               }}
               className="text-meta text-muted hover:text-ink"
             >

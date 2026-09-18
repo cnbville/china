@@ -8,7 +8,7 @@ import { SourceFields } from "@/components/SourceFields";
 import { PriceHint } from "@/components/PriceHint";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
-import { getSignedUrl } from "@/lib/signedUrls";
+import { ItemPhotos } from "@/components/ItemPhotos";
 import {
   deleteItemFully,
   listCategories,
@@ -23,11 +23,12 @@ import {
   emptySourceDraft,
   type SourceDraft,
 } from "@/lib/source";
-import type { Category, Collection, Item, Source } from "@/lib/types";
+import type { Category, Collection, Item, ItemPhoto, Source } from "@/lib/types";
 
 type Data = {
   item: Item;
   sources: Source[];
+  photos: ItemPhoto[];
   collections: Collection[];
   categories: Category[];
 };
@@ -37,9 +38,14 @@ export function ItemView({ itemId }: { itemId: string }) {
   const supabase = useMemo(() => createClient(), []);
 
   const { data, loading, error, refetch } = useLiveData<Data>(async () => {
-    const [itemRes, srcRes, colls, cats] = await Promise.all([
+    const [itemRes, srcRes, photoRes, colls, cats] = await Promise.all([
       supabase.from("items").select("*").eq("id", itemId).single(),
       supabase.from("sources").select("*").eq("item_id", itemId),
+      supabase
+        .from("item_photos")
+        .select("*")
+        .eq("item_id", itemId)
+        .order("position"),
       listCollections(supabase),
       listCategories(supabase),
     ]);
@@ -48,6 +54,7 @@ export function ItemView({ itemId }: { itemId: string }) {
     return {
       item: itemRes.data as Item,
       sources: (srcRes.data ?? []) as Source[],
+      photos: (photoRes.data ?? []) as ItemPhoto[],
       collections: colls,
       categories: cats,
     };
@@ -105,14 +112,9 @@ function ItemBody({
   });
   const [liked, setLiked] = useState(item.liked);
   const [wanted, setWanted] = useState(item.wanted);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [busyMsg, setBusyMsg] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    getSignedUrl(supabase, item.photo_path).then(setPhotoUrl).catch(() => {});
-  }, [supabase, item.photo_path]);
 
   async function patchItem(patch: Record<string, unknown>) {
     const { error } = await supabase.from("items").update(patch).eq("id", item.id);
@@ -183,18 +185,14 @@ function ItemBody({
 
   return (
     <div className="grid gap-8 md:grid-cols-[minmax(0,20rem)_1fr]">
-      {/* Photo */}
+      {/* Photos */}
       <div>
-        <div className="photo-frame rounded-card border border-line shadow-lift">
-          {photoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={photoUrl} alt={item.title} />
-          ) : (
-            <div className="flex h-full items-center justify-center text-meta text-muted">
-              no photo
-            </div>
-          )}
-        </div>
+        <ItemPhotos
+          item={item}
+          photos={data.photos}
+          supabase={supabase}
+          refetch={refetch}
+        />
 
         <div className="mt-4 flex gap-6">
           <label className="flex items-center gap-2 text-body">
