@@ -99,15 +99,20 @@ export function ItemPhotos({
 
   return (
     <div>
-      <div className="photo-frame rounded-card border border-line shadow-lift">
+      {/* Whole image, never cropped — measurement shots stay fully readable. */}
+      <div className="flex items-center justify-center overflow-hidden rounded-card border border-line bg-[#05060a] shadow-lift">
         {mainUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={mainUrl} alt={item.title} />
+          <img
+            src={mainUrl}
+            alt={item.title}
+            className="max-h-[75vh] w-full object-contain"
+          />
         ) : (
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex h-full w-full items-center justify-center text-meta text-muted"
+            className="flex aspect-[4/5] w-full items-center justify-center text-meta text-muted"
           >
             {photos.length === 0 ? "Add a photo" : "no photo"}
           </button>
