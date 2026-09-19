@@ -8,6 +8,7 @@ import { SourceFields } from "@/components/SourceFields";
 import { PriceHint } from "@/components/PriceHint";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import { refreshCatalog } from "@/lib/catalogStore";
 import { ItemPhotos } from "@/components/ItemPhotos";
 import {
   deleteItemFully,
@@ -97,18 +98,12 @@ function ItemBody({
   onDeleted: () => void;
 }) {
   const { item } = data;
-  const collName =
-    data.collections.find((c) => c.id === item.collection_id)?.name ?? "";
-  const catName =
-    data.categories.find((c) => c.id === item.category_id)?.name ?? "";
 
   const [fields, setFields] = useState({
     title: item.title,
     type: item.type ?? "",
     brand: item.brand ?? "",
     notes: item.notes ?? "",
-    collection: collName,
-    category: catName,
   });
   const [liked, setLiked] = useState(item.liked);
   const [wanted, setWanted] = useState(item.wanted);
@@ -118,17 +113,20 @@ function ItemBody({
 
   async function patchItem(patch: Record<string, unknown>) {
     const { error } = await supabase.from("items").update(patch).eq("id", item.id);
-    if (error) setBusyMsg(error.message);
-    else refetch();
+    if (error) {
+      setBusyMsg(error.message);
+    } else {
+      refetch();
+      refreshCatalog(); // keep the feed / collections / rail counts in sync
+    }
   }
 
-  async function saveCollection(name: string) {
-    const id = await resolveCollectionId(supabase, name);
-    patchItem({ collection_id: id });
+  // Move the item to an existing collection / category (or none), immediately.
+  async function changeCollection(id: string | null) {
+    await patchItem({ collection_id: id });
   }
-  async function saveCategory(name: string) {
-    const id = await resolveCategoryId(supabase, name);
-    patchItem({ category_id: id });
+  async function changeCategory(id: string | null) {
+    await patchItem({ category_id: id });
   }
 
   // Explicit "save everything" — fields also autosave on blur, but a real button
@@ -137,10 +135,6 @@ function ItemBody({
     setSaving(true);
     setBusyMsg(null);
     try {
-      const [collection_id, category_id] = await Promise.all([
-        resolveCollectionId(supabase, fields.collection),
-        resolveCategoryId(supabase, fields.category),
-      ]);
       const { error } = await supabase
         .from("items")
         .update({
@@ -148,8 +142,6 @@ function ItemBody({
           type: fields.type.trim() || null,
           brand: fields.brand.trim() || null,
           notes: fields.notes.trim() || null,
-          collection_id,
-          category_id,
           liked,
           wanted,
         })
@@ -158,6 +150,7 @@ function ItemBody({
       setSavedMsg("Saved ✓");
       setTimeout(() => setSavedMsg(null), 2500);
       refetch();
+      refreshCatalog();
     } catch (e) {
       setBusyMsg(e instanceof Error ? e.message : "Save failed.");
     } finally {
@@ -250,30 +243,28 @@ function ItemBody({
             onChange={(v) => setFields((f) => ({ ...f, brand: v }))}
             onBlur={() => patchItem({ brand: fields.brand.trim() || null })}
           />
-          <LabeledInput
+          <EntityPicker
             label="Collection"
-            value={fields.collection}
-            list="coll-list"
-            onChange={(v) => setFields((f) => ({ ...f, collection: v }))}
-            onBlur={() => saveCollection(fields.collection)}
+            noneLabel="None (in feed)"
+            options={data.collections}
+            currentId={item.collection_id}
+            onPick={changeCollection}
+            onCreate={async (name) => {
+              const id = await resolveCollectionId(supabase, name);
+              await changeCollection(id);
+            }}
           />
-          <LabeledInput
+          <EntityPicker
             label="Category"
-            value={fields.category}
-            list="cat-list"
-            onChange={(v) => setFields((f) => ({ ...f, category: v }))}
-            onBlur={() => saveCategory(fields.category)}
+            noneLabel="None"
+            options={data.categories}
+            currentId={item.category_id}
+            onPick={changeCategory}
+            onCreate={async (name) => {
+              const id = await resolveCategoryId(supabase, name);
+              await changeCategory(id);
+            }}
           />
-          <datalist id="coll-list">
-            {data.collections.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
-          <datalist id="cat-list">
-            {data.categories.map((c) => (
-              <option key={c.id} value={c.name} />
-            ))}
-          </datalist>
         </div>
 
         <div className="mt-3">
@@ -335,6 +326,108 @@ function LabeledInput({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
       />
+    </div>
+  );
+}
+
+// Pick an existing collection/category (or none) from a dropdown, or create a
+// new one inline. Saves immediately — no blur, no guessing.
+function EntityPicker({
+  label,
+  noneLabel,
+  options,
+  currentId,
+  onPick,
+  onCreate,
+}: {
+  label: string;
+  noneLabel: string;
+  options: { id: string; name: string }[];
+  currentId: string | null;
+  onPick: (id: string | null) => void | Promise<void>;
+  onCreate: (name: string) => Promise<void>;
+}) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function submit() {
+    const n = name.trim();
+    if (!n) {
+      setCreating(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      await onCreate(n);
+      setName("");
+      setCreating(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-meta text-muted">{label}</label>
+      {creating ? (
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") submit();
+              if (e.key === "Escape") {
+                setName("");
+                setCreating(false);
+              }
+            }}
+            placeholder={`New ${label.toLowerCase()}…`}
+            className="input"
+          />
+          <button
+            type="button"
+            onClick={submit}
+            disabled={busy}
+            className="btn-accent px-3 py-1.5 text-meta disabled:opacity-50"
+          >
+            Add
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setName("");
+              setCreating(false);
+            }}
+            className="text-meta text-muted hover:text-ink"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <select
+          value={currentId ?? ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "__new__") {
+              setName("");
+              setCreating(true);
+            } else {
+              onPick(v || null);
+            }
+          }}
+          className="input mt-1"
+        >
+          <option value="">{noneLabel}</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+          <option value="__new__">＋ New {label.toLowerCase()}…</option>
+        </select>
+      )}
     </div>
   );
 }
