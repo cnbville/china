@@ -80,6 +80,19 @@ export default function AddItemPage() {
     }
   }, [draft]);
 
+  // Abandon the draft when you leave the page (back out / navigate away). A hard
+  // reload doesn't run this cleanup, so an accidental refresh still restores your
+  // work; only a deliberate exit clears it, so the form is fresh next time.
+  useEffect(() => {
+    return () => {
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
+    };
+  }, []);
+
   const set = <K extends keyof ItemDraft>(key: K, value: ItemDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
 
