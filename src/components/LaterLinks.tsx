@@ -8,7 +8,8 @@ import type { SavedLink } from "@/lib/types";
 
 // "Later": a stash of factory links to look at later. A holding pen, separate
 // from catalogued items — paste a URL, come back to it, then open it, promote
-// it to an item, or bin it.
+// it to an item, or bin it. Organised by YOUR labels/notes, not the raw host
+// (reseller shops are all unique subdomains — useless to filter by).
 
 function normalizeUrl(raw: string): string {
   const t = raw.trim();
@@ -39,7 +40,8 @@ function hueOf(s: string): number {
   return h;
 }
 
-type SortKey = "newest" | "oldest" | "site" | "title";
+type SortKey = "newest" | "oldest" | "label" | "site";
+type Editing = { id: string; title: string; note: string; url: string };
 
 export function LaterLinks() {
   const { data, loading, error, refetch } = useLiveData<SavedLink[]>(async () => {
@@ -61,24 +63,37 @@ export function LaterLinks() {
 
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
-  const [site, setSite] = useState<string | null>(null);
+  const [label, setLabel] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Editing | null>(null);
 
   const links = useMemo(() => data ?? [], [data]);
 
-  // Top factories by number of stashed links, for the filter chips.
-  const sites = useMemo(() => {
+  // Filter chips = YOUR labels (a link's title), not the host. The reseller
+  // domains are all unique, so labels are what's actually worth filtering by.
+  const labels = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const l of links) counts[hostOf(l.url)] = (counts[hostOf(l.url)] ?? 0) + 1;
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8);
+    for (const l of links) {
+      const t = (l.title ?? "").trim();
+      if (t) counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return Object.entries(counts).sort(
+      (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+    );
   }, [links]);
+  const unlabelled = useMemo(
+    () => links.filter((l) => !(l.title ?? "").trim()).length,
+    [links],
+  );
 
   const shown = useMemo(() => {
     const t = q.trim().toLowerCase();
     let list = links.filter((l) => {
-      if (site && hostOf(l.url) !== site) return false;
+      if (label === "\u0000none") {
+        if ((l.title ?? "").trim()) return false;
+      } else if (label && (l.title ?? "").trim() !== label) {
+        return false;
+      }
       if (!t) return true;
       return [l.title, l.note, l.url, hostOf(l.url)].some((v) =>
         v?.toLowerCase().includes(t),
@@ -92,17 +107,17 @@ export function LaterLinks() {
       case "oldest":
         list.sort((a, b) => a.created_at.localeCompare(b.created_at));
         break;
+      case "label":
+        list.sort((a, b) =>
+          (a.title || "￿").localeCompare(b.title || "￿"),
+        );
+        break;
       case "site":
         list.sort((a, b) => hostOf(a.url).localeCompare(hostOf(b.url)));
         break;
-      case "title":
-        list.sort((a, b) =>
-          (a.title || hostOf(a.url)).localeCompare(b.title || hostOf(b.url)),
-        );
-        break;
     }
     return list;
-  }, [links, q, site, sort]);
+  }, [links, q, label, sort]);
 
   async function add() {
     const u = normalizeUrl(url);
@@ -129,8 +144,28 @@ export function LaterLinks() {
     refetch();
   }
 
+  async function saveEdit() {
+    if (!editing) return;
+    const u = normalizeUrl(editing.url);
+    const { error } = await createClient()
+      .from("saved_links")
+      .update({
+        url: u || editing.url,
+        title: editing.title.trim() || null,
+        note: editing.note.trim() || null,
+      })
+      .eq("id", editing.id);
+    if (error) {
+      alert(`Couldn't save: ${error.message}`);
+      return;
+    }
+    setEditing(null);
+    refetch();
+  }
+
   async function remove(id: string) {
     await createClient().from("saved_links").delete().eq("id", id);
+    if (editing?.id === id) setEditing(null);
     refetch();
   }
 
@@ -155,9 +190,9 @@ export function LaterLinks() {
       </div>
       <h1 className="font-serif text-4xl leading-tight">Later</h1>
       <p className="mt-2 max-w-prose text-meta text-muted">
-        A holding pen for factory links you want to look at later — nothing here
-        is in your catalog yet. Open one, save it as an item when you decide, or
-        bin it.
+        A holding pen for factory links you want to look at later. Give each a
+        label and a note — that&rsquo;s what you browse and filter by, not the
+        raw shop URL.
       </p>
 
       {/* Add bar */}
@@ -184,7 +219,7 @@ export function LaterLinks() {
             className="rounded-card border border-line px-3 py-2 text-meta text-muted transition-colors hover:text-ink"
             title="Add a label or note"
           >
-            {showDetails ? "Less" : "＋ Details"}
+            {showDetails ? "Less" : "＋ Label / note"}
           </button>
           <button
             onClick={add}
@@ -199,13 +234,13 @@ export function LaterLinks() {
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Label / seller (optional)"
+              placeholder="Label — e.g. 'grey hoodie', 'winter'"
               className="input"
             />
             <input
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="Note to self (optional)"
+              placeholder="Note to self (details, sizes, price…)"
               className="input"
             />
           </div>
@@ -234,7 +269,7 @@ export function LaterLinks() {
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search links…"
+                placeholder="Search labels, notes, links…"
                 className="w-full bg-transparent py-1.5 text-meta text-ink outline-none placeholder:text-muted/70"
               />
             </div>
@@ -245,81 +280,118 @@ export function LaterLinks() {
             >
               <option value="newest">Newest</option>
               <option value="oldest">Oldest</option>
+              <option value="label">By label</option>
               <option value="site">By site</option>
-              <option value="title">By title</option>
             </select>
           </div>
 
-          {/* Site filter chips */}
-          {sites.length > 1 && (
+          {/* Label filter chips */}
+          {(labels.length > 0 || unlabelled > 0) && (
             <div className="mt-3 flex flex-wrap gap-1.5">
-              <Chip active={site === null} onClick={() => setSite(null)}>
+              <Chip active={label === null} onClick={() => setLabel(null)}>
                 All <span className="text-muted">· {links.length}</span>
               </Chip>
-              {sites.map(([h, n]) => (
-                <Chip key={h} active={site === h} onClick={() => setSite(site === h ? null : h)}>
-                  {h} <span className="text-muted">· {n}</span>
+              {labels.map(([t, n]) => (
+                <Chip key={t} active={label === t} onClick={() => setLabel(label === t ? null : t)}>
+                  {t} <span className="text-muted">· {n}</span>
                 </Chip>
               ))}
+              {unlabelled > 0 && (
+                <Chip
+                  active={label === "\u0000none"}
+                  onClick={() => setLabel(label === "\u0000none" ? null : "\u0000none")}
+                >
+                  <span className="italic text-muted">Unlabelled</span>
+                  <span className="text-muted"> · {unlabelled}</span>
+                </Chip>
+              )}
             </div>
           )}
 
           <p className="mt-4 text-meta text-muted tnum">
             {shown.length} {shown.length === 1 ? "link" : "links"}
-            {site ? ` at ${site}` : sites.length > 1 ? ` across ${sites.length} sites` : ""}
+            {label && label !== "\u0000none" ? ` labelled "${label}"` : ""}
           </p>
 
           {/* Cards */}
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             {shown.map((l) => {
               const host = hostOf(l.url);
+              if (editing?.id === l.id) {
+                return (
+                  <div key={l.id} className="rounded-card border border-accent/60 bg-card p-3">
+                    <div className="mb-2 text-[10.5px] uppercase tracking-[0.18em] text-muted">
+                      Edit link
+                    </div>
+                    <div className="space-y-2">
+                      <input
+                        value={editing.title}
+                        onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                        placeholder="Label"
+                        className="input"
+                      />
+                      <textarea
+                        value={editing.note}
+                        onChange={(e) => setEditing({ ...editing, note: e.target.value })}
+                        placeholder="Note"
+                        rows={3}
+                        className="input resize-none"
+                      />
+                      <input
+                        value={editing.url}
+                        onChange={(e) => setEditing({ ...editing, url: e.target.value })}
+                        placeholder="URL"
+                        className="input text-meta"
+                        inputMode="url"
+                      />
+                    </div>
+                    <div className="mt-3 flex items-center gap-2">
+                      <button onClick={saveEdit} className="btn-accent px-3 py-1.5 text-meta">Save</button>
+                      <button onClick={() => setEditing(null)} className="text-meta text-muted hover:text-ink">Cancel</button>
+                    </div>
+                  </div>
+                );
+              }
               return (
                 <div
                   key={l.id}
                   className="group relative flex flex-col overflow-hidden rounded-card border border-line bg-card/50 transition-all hover:border-accent/40 hover:bg-card hover:shadow-lift"
                 >
-                  {/* accent hairline on hover */}
                   <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
 
                   <a href={l.url} target="_blank" rel="noreferrer" className="flex flex-1 gap-3 p-3">
                     <FaviconTile host={host} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-body text-ink">
-                        {l.title || host}
+                      {l.title && (
+                        <div className="truncate text-[11px] uppercase tracking-[0.12em] text-accentSoft/80">
+                          {l.title}
+                        </div>
+                      )}
+                      <div className="line-clamp-3 text-body text-ink">
+                        {l.note || l.title || host}
                       </div>
-                      <div className="flex items-center gap-2 text-meta text-muted">
+                      <div className="mt-1.5 flex items-center gap-2 text-[11px] text-muted">
                         <span className="truncate">{host}</span>
                         <span className="text-line">·</span>
                         <span className="tnum">{fmtDate(l.created_at)}</span>
                       </div>
-                      {l.note && (
-                        <p className="mt-1.5 line-clamp-2 text-meta text-muted">
-                          {l.note}
-                        </p>
-                      )}
                     </div>
                   </a>
 
                   <div className="flex items-center gap-1 border-t border-line/70 px-3 py-2">
-                    <a
-                      href={l.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-pill px-2.5 py-1 text-meta text-accentSoft/90 transition-colors hover:bg-surface2 hover:text-accentSoft"
-                    >
+                    <a href={l.url} target="_blank" rel="noreferrer" className="rounded-pill px-2.5 py-1 text-meta text-accentSoft/90 transition-colors hover:bg-surface2 hover:text-accentSoft">
                       Open ↗
                     </a>
                     <button
-                      onClick={() => copy(l.url, l.id)}
+                      onClick={() => setEditing({ id: l.id, title: l.title ?? "", note: l.note ?? "", url: l.url })}
                       className="rounded-pill px-2.5 py-1 text-meta text-muted transition-colors hover:bg-surface2 hover:text-ink"
                     >
+                      Edit
+                    </button>
+                    <button onClick={() => copy(l.url, l.id)} className="rounded-pill px-2.5 py-1 text-meta text-muted transition-colors hover:bg-surface2 hover:text-ink">
                       {copied === l.id ? "Copied ✓" : "Copy"}
                     </button>
-                    <button
-                      onClick={() => remove(l.id)}
-                      title="Remove"
-                      className="ml-auto rounded-full p-1.5 text-muted transition-colors hover:text-accentSoft"
-                    >
+                    <button onClick={() => remove(l.id)} title="Remove" className="ml-auto rounded-full p-1.5 text-muted transition-colors hover:text-accentSoft">
                       <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6M10 11v6M14 11v6" />
                       </svg>
