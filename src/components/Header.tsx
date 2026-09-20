@@ -56,6 +56,13 @@ export function Header() {
             <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z" />
           </IconLink>
           <IconLink
+            href="/junk"
+            label="Junk — scratch drawer"
+            active={pathname === "/junk"}
+          >
+            <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6M10 11v5M14 11v5" />
+          </IconLink>
+          <IconLink
             href="/outfits"
             label="Outfits"
             active={pathname.startsWith("/outfits")}

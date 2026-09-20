@@ -102,3 +102,12 @@ export type SavedLink = {
   note: string | null;
   created_at: string;
 };
+
+// A quick scratch entry — just a link + a note (migration 0012, the "Junk"
+// drawer). Deliberately separate from SavedLink / the Later page.
+export type JunkLink = {
+  id: string;
+  url: string;
+  note: string | null;
+  created_at: string;
+};
