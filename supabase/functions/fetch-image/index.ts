@@ -12,7 +12,16 @@
 // the host allowlist below limits fetches to known garment-CDN hosts, so it
 // can't be pointed at internal addresses.
 
-import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
+// Base64-encode bytes without a dependency, chunked so a big image doesn't blow
+// the argument limit of String.fromCharCode / the call stack.
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
 
 const CORS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
@@ -101,5 +110,5 @@ Deno.serve(async (req) => {
   const buf = await upstream.arrayBuffer();
   if (buf.byteLength > MAX_BYTES) return json({ error: "Image too large" }, 413);
 
-  return json({ mime, data: encodeBase64(new Uint8Array(buf)) });
+  return json({ mime, data: toBase64(new Uint8Array(buf)) });
 });
