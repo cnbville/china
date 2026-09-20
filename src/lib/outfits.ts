@@ -178,6 +178,20 @@ export async function updatePiece(
   if (error) throw error;
 }
 
+/** Pin (or clear) a specific catalog-item photo for a piece. */
+export async function setPiecePhoto(
+  supabase: SupabaseClient,
+  id: string,
+  photoPath: string | null,
+  thumbPath: string | null,
+): Promise<void> {
+  const { error } = await supabase
+    .from("outfit_pieces")
+    .update({ chosen_photo_path: photoPath, chosen_thumb_path: thumbPath })
+    .eq("id", id);
+  if (error) throw error;
+}
+
 export async function removePiece(
   supabase: SupabaseClient,
   piece: OutfitPiece,

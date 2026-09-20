@@ -15,8 +15,10 @@ export type Reason = (typeof REASONS)[number];
 
 export const PHOTOS_BUCKET = "photos";
 
-// Client-side resize targets (plan section 2).
-export const FULL_MAX_EDGE = 1600;
-export const FULL_QUALITY = 0.8;
-export const THUMB_MAX_EDGE = 400;
-export const THUMB_QUALITY = 0.7;
+// Client-side resize targets (plan section 2). Bumped for crisper images —
+// the full image is what detail/outfit views show, so it stays high quality;
+// thumbnails are larger too so grids look sharp on retina screens.
+export const FULL_MAX_EDGE = 2048;
+export const FULL_QUALITY = 0.9;
+export const THUMB_MAX_EDGE = 600;
+export const THUMB_QUALITY = 0.82;

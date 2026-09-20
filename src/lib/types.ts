@@ -81,6 +81,9 @@ export type OutfitPiece = {
   placeholder_label: string | null;
   photo_path: string | null;
   thumb_path: string | null;
+  // A specific photo of the catalog item to show for this piece (colourway).
+  chosen_photo_path: string | null;
+  chosen_thumb_path: string | null;
   slot: string | null;
   sort_order: number;
   x: number;
