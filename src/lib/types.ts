@@ -62,6 +62,35 @@ export type ItemPhoto = {
   created_at: string;
 };
 
+// An outfit and its pieces (migration 0010, the Outfit Creator).
+export type Outfit = {
+  id: string;
+  name: string;
+  season: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// One piece in an outfit: either a catalog item (item_id set) or a placeholder
+// (placeholder_label set). Carries layout for all three views.
+export type OutfitPiece = {
+  id: string;
+  outfit_id: string;
+  item_id: string | null;
+  placeholder_label: string | null;
+  photo_path: string | null;
+  thumb_path: string | null;
+  slot: string | null;
+  sort_order: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+  z: number;
+  created_at: string;
+};
+
 // A factory link stashed to review later (migration 0008, the "Later" tab).
 export type SavedLink = {
   id: string;
