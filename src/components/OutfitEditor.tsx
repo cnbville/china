@@ -14,10 +14,11 @@ import {
   deleteOutfit,
   getOutfit,
   removePiece,
+  setPiecePhoto,
   updateOutfit,
   updatePiece,
 } from "@/lib/outfits";
-import type { ItemCard, Outfit, OutfitPiece } from "@/lib/types";
+import type { ItemCard, ItemPhoto, Outfit, OutfitPiece } from "@/lib/types";
 
 type Mode = "canvas" | "slots" | "stack";
 const MODES: { key: Mode; label: string }[] = [
@@ -29,8 +30,10 @@ const MODES: { key: Mode; label: string }[] = [
 type Resolved = {
   title: string;
   price: number | null;
-  thumbPath: string | null;
+  fullPath: string | null; // high-res, for big views (canvas / stack)
+  thumbPath: string | null; // small, for rows / covers
   isPlaceholder: boolean;
+  itemId: string | null;
 };
 
 type PiecePatch = Partial<
@@ -55,6 +58,7 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
   const [mode, setMode] = useState<Mode>("canvas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [photoPiece, setPhotoPiece] = useState<OutfitPiece | null>(null);
   const [thumbs, setThumbs] = useState<Record<string, string>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -116,26 +120,33 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
       return {
         title: it?.title ?? "(deleted item)",
         price: it?.lead_price ?? null,
-        thumbPath: it?.thumb_path ?? null,
+        fullPath: p.chosen_photo_path ?? it?.photo_path ?? null,
+        thumbPath: p.chosen_thumb_path ?? it?.thumb_path ?? null,
         isPlaceholder: false,
+        itemId: p.item_id,
       };
     }
     return {
       title: p.placeholder_label ?? "Placeholder",
       price: null,
+      fullPath: p.photo_path,
       thumbPath: p.thumb_path,
       isPlaceholder: true,
+      itemId: null,
     };
   }
 
-  // Sign every visible thumbnail.
+  // Sign every visible image — both the small thumb and the full-res version.
   useEffect(() => {
     if (!pieces) return;
-    const paths = pieces
-      .map((p) => resolve(p).thumbPath)
-      .filter((p): p is string => !!p);
+    const paths: string[] = [];
+    for (const p of pieces) {
+      const r = resolve(p);
+      if (r.thumbPath) paths.push(r.thumbPath);
+      if (r.fullPath) paths.push(r.fullPath);
+    }
     if (paths.length === 0) return;
-    getSignedUrls(supabase, paths).then(setThumbs).catch(() => {});
+    getSignedUrls(supabase, paths).then((m) => setThumbs((t) => ({ ...t, ...m }))).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pieces, itemsById, supabase]);
 
@@ -191,6 +202,21 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
     const b = list[swapWith];
     persist(a.id, { sort_order: b.sort_order });
     persist(b.id, { sort_order: a.sort_order });
+  }
+
+  async function choosePhoto(
+    pieceId: string,
+    full: string | null,
+    thumb: string | null,
+  ) {
+    setPieces((ps) =>
+      (ps ?? []).map((p) =>
+        p.id === pieceId
+          ? { ...p, chosen_photo_path: full, chosen_thumb_path: thumb }
+          : p,
+      ),
+    );
+    await setPiecePhoto(supabase, pieceId, full, thumb).catch(() => {});
   }
 
   async function deleteThisOutfit() {
@@ -318,6 +344,7 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
                 onMove={(id, x, y) => patchLocal(id, { x, y })}
                 onCommit={(id, x, y) => persist(id, { x, y })}
                 onAction={(id, patch) => persist(id, patch)}
+                onSwitchPhoto={setPhotoPiece}
                 onRemove={remove}
               />
             )}
@@ -327,6 +354,7 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
                 thumbs={thumbs}
                 resolve={resolve}
                 onSlot={(id, slot) => persist(id, { slot })}
+                onSwitchPhoto={setPhotoPiece}
                 onRemove={remove}
               />
             )}
@@ -336,6 +364,7 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
                 thumbs={thumbs}
                 resolve={resolve}
                 onMove={move}
+                onSwitchPhoto={setPhotoPiece}
                 onRemove={remove}
               />
             )}
@@ -352,6 +381,18 @@ export function OutfitEditor({ outfitId }: { outfitId: string }) {
           onClose={() => setPickerOpen(false)}
         />
       )}
+
+      {photoPiece && photoPiece.item_id && (
+        <PhotoSwitcher
+          itemId={photoPiece.item_id}
+          currentPath={photoPiece.chosen_photo_path}
+          onPick={(full, thumb) => {
+            choosePhoto(photoPiece.id, full, thumb);
+            setPhotoPiece(null);
+          }}
+          onClose={() => setPhotoPiece(null)}
+        />
+      )}
     </>
   );
 }
@@ -366,6 +407,7 @@ function CanvasView({
   onMove,
   onCommit,
   onAction,
+  onSwitchPhoto,
   onRemove,
 }: {
   pieces: OutfitPiece[];
@@ -376,6 +418,7 @@ function CanvasView({
   onMove: (id: string, x: number, y: number) => void;
   onCommit: (id: string, x: number, y: number) => void;
   onAction: (id: string, patch: PiecePatch) => void;
+  onSwitchPhoto: (p: OutfitPiece) => void;
   onRemove: (p: OutfitPiece) => void;
 }) {
   const boardRef = useRef<HTMLDivElement>(null);
@@ -419,6 +462,7 @@ function CanvasView({
           <ToolBtn disabled={!selected} onClick={() => selected && onAction(selected.id, { rotation: selected.rotation + 15 })} label="Rotate right">⟳</ToolBtn>
           <ToolBtn disabled={!selected} onClick={() => selected && onAction(selected.id, { scale: Math.max(0.4, selected.scale / 1.15) })} label="Smaller">－</ToolBtn>
           <ToolBtn disabled={!selected} onClick={() => selected && onAction(selected.id, { scale: Math.min(2.4, selected.scale * 1.15) })} label="Bigger">＋</ToolBtn>
+          <ToolBtn disabled={!selected || !selected.item_id} onClick={() => selected && onSwitchPhoto(selected)} label="Switch photo / colour">◐</ToolBtn>
           <ToolBtn disabled={!selected} danger onClick={() => selected && onRemove(selected)} label="Remove">🗑</ToolBtn>
         </div>
       </div>
@@ -435,7 +479,10 @@ function CanvasView({
       >
         {pieces.map((p) => {
           const r = resolve(p);
-          const src = r.thumbPath ? thumbs[r.thumbPath] : undefined;
+          const src =
+            (r.fullPath && thumbs[r.fullPath]) ||
+            (r.thumbPath && thumbs[r.thumbPath]) ||
+            undefined;
           return (
             <div
               key={p.id}
@@ -508,12 +555,14 @@ function SlotsView({
   thumbs,
   resolve,
   onSlot,
+  onSwitchPhoto,
   onRemove,
 }: {
   pieces: OutfitPiece[];
   thumbs: Record<string, string>;
   resolve: (p: OutfitPiece) => Resolved;
   onSlot: (id: string, slot: string | null) => void;
+  onSwitchPhoto: (p: OutfitPiece) => void;
   onRemove: (p: OutfitPiece) => void;
 }) {
   const unassigned = pieces.filter((p) => !p.slot);
@@ -532,7 +581,7 @@ function SlotsView({
               ) : (
                 <div className="space-y-2">
                   {inSlot.map((p) => (
-                    <PieceRow key={p.id} p={p} r={resolve(p)} thumbs={thumbs} onSlot={onSlot} onRemove={onRemove} />
+                    <PieceRow key={p.id} p={p} r={resolve(p)} thumbs={thumbs} onSlot={onSlot} onSwitchPhoto={onSwitchPhoto} onRemove={onRemove} />
                   ))}
                 </div>
               )}
@@ -548,7 +597,7 @@ function SlotsView({
           </div>
           <div className="space-y-2">
             {unassigned.map((p) => (
-              <PieceRow key={p.id} p={p} r={resolve(p)} thumbs={thumbs} onSlot={onSlot} onRemove={onRemove} />
+              <PieceRow key={p.id} p={p} r={resolve(p)} thumbs={thumbs} onSlot={onSlot} onSwitchPhoto={onSwitchPhoto} onRemove={onRemove} />
             ))}
           </div>
         </div>
@@ -562,12 +611,14 @@ function PieceRow({
   r,
   thumbs,
   onSlot,
+  onSwitchPhoto,
   onRemove,
 }: {
   p: OutfitPiece;
   r: Resolved;
   thumbs: Record<string, string>;
   onSlot: (id: string, slot: string | null) => void;
+  onSwitchPhoto: (p: OutfitPiece) => void;
   onRemove: (p: OutfitPiece) => void;
 }) {
   const src = r.thumbPath ? thumbs[r.thumbPath] : undefined;
@@ -585,6 +636,15 @@ function PieceRow({
           {r.price != null ? `¥${fmt(r.price)}` : r.isPlaceholder ? "placeholder" : "no price"}
         </div>
       </div>
+      {r.itemId && (
+        <button
+          onClick={() => onSwitchPhoto(p)}
+          title="Switch photo / colour"
+          className="rounded-full border border-line p-1.5 text-muted transition-colors hover:border-accent/60 hover:text-ink"
+        >
+          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
+        </button>
+      )}
       <select
         value={p.slot ?? ""}
         onChange={(e) => onSlot(p.id, e.target.value || null)}
@@ -614,19 +674,24 @@ function StackView({
   thumbs,
   resolve,
   onMove,
+  onSwitchPhoto,
   onRemove,
 }: {
   pieces: OutfitPiece[];
   thumbs: Record<string, string>;
   resolve: (p: OutfitPiece) => Resolved;
   onMove: (id: string, dir: -1 | 1) => void;
+  onSwitchPhoto: (p: OutfitPiece) => void;
   onRemove: (p: OutfitPiece) => void;
 }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
       {pieces.map((p, i) => {
         const r = resolve(p);
-        const src = r.thumbPath ? thumbs[r.thumbPath] : undefined;
+        const src =
+          (r.fullPath && thumbs[r.fullPath]) ||
+          (r.thumbPath && thumbs[r.thumbPath]) ||
+          undefined;
         return (
           <div key={p.id} className="overflow-hidden rounded-card border border-line bg-card">
             <div className="photo-frame">
@@ -652,6 +717,11 @@ function StackView({
               <div className="mt-2 flex items-center gap-1">
                 <button onClick={() => onMove(p.id, -1)} disabled={i === 0} title="Move earlier" className="rounded-card border border-line px-2 py-0.5 text-meta text-muted disabled:opacity-30 hover:text-ink">←</button>
                 <button onClick={() => onMove(p.id, 1)} disabled={i === pieces.length - 1} title="Move later" className="rounded-card border border-line px-2 py-0.5 text-meta text-muted disabled:opacity-30 hover:text-ink">→</button>
+                {r.itemId && (
+                  <button onClick={() => onSwitchPhoto(p)} title="Switch photo / colour" className="rounded-full border border-line p-1 text-muted transition-colors hover:border-accent/60 hover:text-ink">
+                    <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor" stroke="none" /></svg>
+                  </button>
+                )}
                 <button onClick={() => onRemove(p)} title="Remove" className="ml-auto rounded-full border border-line p-1 text-muted transition-colors hover:border-accent hover:text-accentSoft">
                   <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
                 </button>
@@ -809,6 +879,88 @@ function PiecePicker({
         <div className="border-t border-line p-3 text-center">
           <button onClick={onClose} className="btn-ghost">Done</button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Pick which photo of a catalog item this piece shows (e.g. a colourway from a
+// 5-colour link). "Cover" clears the override.
+function PhotoSwitcher({
+  itemId,
+  currentPath,
+  onPick,
+  onClose,
+}: {
+  itemId: string;
+  currentPath: string | null;
+  onPick: (full: string | null, thumb: string | null) => void;
+  onClose: () => void;
+}) {
+  const supabase = useMemo(() => createClient(), []);
+  const [photos, setPhotos] = useState<ItemPhoto[] | null>(null);
+  const [thumbs, setThumbs] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let alive = true;
+    supabase
+      .from("item_photos")
+      .select("*")
+      .eq("item_id", itemId)
+      .order("position")
+      .then(({ data }) => {
+        if (!alive) return;
+        const list = (data ?? []) as ItemPhoto[];
+        setPhotos(list);
+        const paths = list.map((p) => p.thumb_path).filter(Boolean) as string[];
+        if (paths.length) getSignedUrls(supabase, paths).then(setThumbs).catch(() => {});
+      });
+    return () => {
+      alive = false;
+    };
+  }, [itemId, supabase]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-card border border-line bg-paper p-4 shadow-lift">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-serif text-2xl">Choose photo</h2>
+          <button onClick={onClose} className="rounded-card p-2 text-muted hover:bg-surface2 hover:text-ink">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+          </button>
+        </div>
+        {!photos && <p className="text-meta text-muted">Loading…</p>}
+        {photos && photos.length === 0 && (
+          <p className="text-meta text-muted">This item has just one photo.</p>
+        )}
+        {photos && photos.length > 0 && (
+          <div className="grid grid-cols-4 gap-2">
+            <button
+              onClick={() => onPick(null, null)}
+              className={
+                "flex aspect-[4/5] items-center justify-center rounded-[8px] border text-[10px] uppercase tracking-wider text-muted " +
+                (currentPath == null ? "border-accent text-ink" : "border-line hover:border-accent/60")
+              }
+            >
+              Cover
+            </button>
+            {photos.map((ph) => (
+              <button
+                key={ph.id}
+                onClick={() => onPick(ph.photo_path, ph.thumb_path)}
+                className={
+                  "aspect-[4/5] overflow-hidden rounded-[8px] border bg-[#05060a] " +
+                  (currentPath === ph.photo_path ? "border-accent" : "border-line hover:border-accent/60")
+                }
+              >
+                {thumbs[ph.thumb_path] && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={thumbs[ph.thumb_path]} alt="" className="h-full w-full object-cover" />
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
