@@ -55,6 +55,13 @@ export function Header() {
           >
             <path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z" />
           </IconLink>
+          <IconLink
+            href="/outfits"
+            label="Outfits"
+            active={pathname.startsWith("/outfits")}
+          >
+            <path d="M12 3a2.2 2.2 0 0 0-1 4.1V9L3 15.5c-1 .8-.5 2.5.8 2.5h16.4c1.3 0 1.8-1.7.8-2.5L13 9V7.1A2.2 2.2 0 0 0 12 3Z" />
+          </IconLink>
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
