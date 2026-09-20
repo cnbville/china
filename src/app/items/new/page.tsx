@@ -296,36 +296,18 @@ export default function AddItemPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-meta text-muted">Collection</label>
-                <input
-                  className="input mt-1"
-                  list="collections-list"
-                  value={draft.collection}
-                  onChange={(e) => set("collection", e.target.value)}
-                  placeholder="SS26"
-                />
-                <datalist id="collections-list">
-                  {collections.map((c) => (
-                    <option key={c.id} value={c.name} />
-                  ))}
-                </datalist>
-              </div>
-              <div>
-                <label className="block text-meta text-muted">Category</label>
-                <input
-                  className="input mt-1"
-                  list="categories-list"
-                  value={draft.category}
-                  onChange={(e) => set("category", e.target.value)}
-                  placeholder="hoodies"
-                />
-                <datalist id="categories-list">
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.name} />
-                  ))}
-                </datalist>
-              </div>
+              <NamePicker
+                label="Collection"
+                options={collections}
+                value={draft.collection}
+                onChange={(v) => set("collection", v)}
+              />
+              <NamePicker
+                label="Category"
+                options={categories}
+                value={draft.category}
+                onChange={(v) => set("category", v)}
+              />
             </div>
 
             <div className="flex gap-6">
@@ -394,5 +376,79 @@ export default function AddItemPage() {
         </form>
       </main>
     </>
+  );
+}
+
+// Pick an existing collection/category from a dropdown (so what you already have
+// is visible — a datalist hides its options until you type), or "＋ New…" to
+// type a fresh name. Stores the name in the draft; it's resolved to an id (found
+// or created) on save.
+function NamePicker({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { id: string; name: string }[];
+  value: string;
+  onChange: (name: string) => void;
+}) {
+  const [creating, setCreating] = useState(false);
+  const known = options.some(
+    (o) => o.name.toLowerCase() === value.trim().toLowerCase(),
+  );
+  // A non-empty value that isn't an existing option is a new name in progress.
+  const inCreate = creating || (!!value.trim() && !known);
+
+  return (
+    <div>
+      <label className="block text-meta text-muted">{label}</label>
+      {inCreate ? (
+        <div className="mt-1 flex items-center gap-2">
+          <input
+            autoFocus
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={`New ${label.toLowerCase()}…`}
+            className="input"
+          />
+          {options.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                onChange("");
+                setCreating(false);
+              }}
+              className="whitespace-nowrap text-meta text-muted hover:text-ink"
+            >
+              Pick existing
+            </button>
+          )}
+        </div>
+      ) : (
+        <select
+          value={known ? value : ""}
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v === "__new__") {
+              onChange("");
+              setCreating(true);
+            } else {
+              onChange(v);
+            }
+          }}
+          className="input mt-1"
+        >
+          <option value="">None</option>
+          {options.map((o) => (
+            <option key={o.id} value={o.name}>
+              {o.name}
+            </option>
+          ))}
+          <option value="__new__">＋ New {label.toLowerCase()}…</option>
+        </select>
+      )}
+    </div>
   );
 }
