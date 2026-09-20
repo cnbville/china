@@ -93,6 +93,12 @@ export async function fetchImportImage(
  * self-contained IIFE so it survives being stored as a `javascript:` bookmark.
  * Extraction is best-effort and never throws: it always at least captures the
  * page URL, its title, and og:image, then lands you in the form to confirm.
+ *
+ * On 1688 it reads the page's own `window.gallery` object — a clean, ordered,
+ * full-res photo list (`offerImgList`) plus the real title (`subject`) — instead
+ * of scraping stray <img> tags, which pulls in ads/icons/thumbnails. Everywhere
+ * else it falls back to og:image + gallery-CDN <img> tags. (Price/MOQ/colours
+ * aren't exposed in a reachable global on 1688, so those stay best-effort/manual.)
  */
 export function buildBookmarklet(addItemUrl: string): string {
   // NOTE: keep this body ES5-ish and quote-safe — it's stringified into an href.
@@ -101,12 +107,12 @@ var A=${JSON.stringify(addItemUrl)};
 function norm(u){try{return u.replace(/\\.(jpg|jpeg|png|webp)[^\\/?]*(\\?.*)?$/i,'.$1')}catch(e){return u}}
 var seen={},imgs=[];
 function add(u){if(!u)return;if(u.indexOf('//')===0)u='https:'+u;if(!/^https?:/i.test(u))return;u=norm(u);if(seen[u])return;seen[u]=1;imgs.push(u)}
-var og=document.querySelector('meta[property="og:image"]');if(og)add(og.getAttribute('content'));
-var n=document.querySelectorAll('img');
-for(var i=0;i<n.length;i++){var s=n[i].getAttribute('src')||n[i].getAttribute('data-src')||n[i].getAttribute('data-lazy-src')||'';if(/alicdn\\.com|yupoo|vpimg|geilicdn/i.test(s))add(s)}
-imgs=imgs.slice(0,12);
+var G=window.gallery;
+if(G&&G.offerImgList&&G.offerImgList.length){for(var j=0;j<G.offerImgList.length;j++)add(G.offerImgList[j])}
+else{var og=document.querySelector('meta[property="og:image"]');if(og)add(og.getAttribute('content'));var n=document.querySelectorAll('img');for(var i=0;i<n.length;i++){var im=n[i];var s=im.getAttribute('src')||im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||'';if(!/alicdn\\.com|yupoo|vpimg|geilicdn/i.test(s))continue;var w=im.naturalWidth||im.width||0,h=im.naturalHeight||im.height||0;if(w&&h&&w<200&&h<200)continue;add(s)}}
+imgs=imgs.slice(0,15);
 var ot=document.querySelector('meta[property="og:title"]');
-var title=(ot&&ot.getAttribute('content'))||document.title||'';
+var title=(G&&G.subject)||(ot&&ot.getAttribute('content'))||document.title||'';
 var price='';var pm=(document.body.innerText||'').match(/[\\u00a5\\uffe5]\\s*([0-9]+(?:\\.[0-9]+)?)/);if(pm)price=pm[1];
 var payload={v:1,title:(title||'').trim(),url:location.href,price:price,images:imgs};
 window.open(A+'#import='+encodeURIComponent(JSON.stringify(payload)),'_blank');
