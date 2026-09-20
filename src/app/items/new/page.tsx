@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { PhotoInput } from "@/components/PhotoInput";
@@ -14,6 +15,11 @@ import {
   uploadPhoto,
 } from "@/lib/catalog";
 import { draftToPayload, emptySourceDraft, type SourceDraft } from "@/lib/source";
+import {
+  fetchImportImage,
+  importImageUrls,
+  readImportFromHash,
+} from "@/lib/import";
 import type { Category, Collection } from "@/lib/types";
 
 const DRAFT_KEY = "add-item-draft:v1";
@@ -52,11 +58,72 @@ export default function AddItemPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Non-null while the quick-import is re-hosting photos; carries progress + a
+  // closing note (e.g. some images couldn't be fetched).
+  const [importing, setImporting] = useState<{
+    done: number;
+    total: number;
+    note?: string;
+  } | null>(null);
   const loadedDraft = useRef(false);
 
-  // Restore any saved draft on mount, and load existing collections/categories
-  // for the datalists.
+  // On mount: load the datalists, then either apply a quick-import payload from
+  // the URL hash (bookmarklet) or restore a saved draft. Import wins over a stale
+  // draft — it's the deliberate, fresher intent.
   useEffect(() => {
+    const supabase = createClient();
+    listCollections(supabase).then(setCollections).catch(() => {});
+    listCategories(supabase).then(setCategories).catch(() => {});
+
+    const imported = readImportFromHash();
+    if (imported) {
+      // Drop the hash so a refresh doesn't re-import.
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
+      setDraft({
+        ...emptyItemDraft,
+        title: imported.title?.trim() ?? "",
+        source: {
+          ...emptySourceDraft,
+          url: imported.url?.trim() ?? "",
+          seller_name: imported.seller?.trim() ?? "",
+          price: imported.price?.trim() ?? "",
+          moq: imported.moq?.trim() ?? "",
+          colors: imported.colors ?? [],
+          sizes: imported.sizes ?? [],
+        },
+      });
+      loadedDraft.current = true;
+
+      const urls = importImageUrls(imported);
+      if (urls.length > 0) {
+        setImporting({ done: 0, total: urls.length });
+        (async () => {
+          const collected: File[] = [];
+          for (let i = 0; i < urls.length; i++) {
+            const file = await fetchImportImage(supabase, urls[i], i);
+            if (file) collected.push(file);
+            setImporting({ done: i + 1, total: urls.length });
+          }
+          setFiles(collected);
+          const missed = urls.length - collected.length;
+          setImporting(
+            missed > 0
+              ? {
+                  done: urls.length,
+                  total: urls.length,
+                  note: `${collected.length}/${urls.length} photos imported — add the rest by hand.`,
+                }
+              : null,
+          );
+        })();
+      }
+      return;
+    }
+
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (raw) setDraft({ ...emptyItemDraft, ...JSON.parse(raw) });
@@ -64,10 +131,6 @@ export default function AddItemPage() {
       /* ignore malformed draft */
     }
     loadedDraft.current = true;
-
-    const supabase = createClient();
-    listCollections(supabase).then(setCollections).catch(() => {});
-    listCategories(supabase).then(setCategories).catch(() => {});
   }, []);
 
   // Persist the draft on every change (after the initial restore).
@@ -175,7 +238,28 @@ export default function AddItemPage() {
     <>
       <Header />
       <main className="mx-auto max-w-2xl px-4 py-8">
-        <h1 className="font-serif text-3xl">Add item</h1>
+        <div className="flex items-baseline justify-between gap-3">
+          <h1 className="font-serif text-3xl">Add item</h1>
+          <Link
+            href="/import"
+            className="text-meta text-muted hover:text-accent"
+            title="Set up 1-click import from a link"
+          >
+            ⚡ Quick import
+          </Link>
+        </div>
+
+        {importing && (
+          <div className="mt-4 rounded-card border border-line bg-surface2/40 px-4 py-3 text-meta">
+            {importing.note ? (
+              <span className="text-muted">{importing.note}</span>
+            ) : (
+              <span className="text-ink">
+                Importing photos… {importing.done}/{importing.total}
+              </span>
+            )}
+          </div>
+        )}
 
         <form onSubmit={onSubmit} className="mt-6 space-y-8">
           <PhotoInput files={files} onFiles={setFiles} />
