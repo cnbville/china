@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import { linkKey } from "@/lib/linkKey";
 import type { SavedLink } from "@/lib/types";
 
 // "Later": a stash of factory links to look at later. A holding pen, separate
@@ -123,6 +124,11 @@ export function LaterLinks() {
     const u = normalizeUrl(url);
     if (!u) {
       setMsg("Paste a link first.");
+      return;
+    }
+    const key = linkKey(u);
+    if (links.some((l) => linkKey(l.url) === key)) {
+      setMsg("You've already saved this link.");
       return;
     }
     setBusy(true);
