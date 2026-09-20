@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import { linkKey } from "@/lib/linkKey";
 import type { JunkLink } from "@/lib/types";
 
 // "Junk": the scratch drawer. Just a link + a note, dumped fast and listed
@@ -54,6 +55,11 @@ export function JunkLinks() {
     const u = normalizeUrl(url);
     if (!u) {
       setMsg("Paste a link first.");
+      return;
+    }
+    const key = linkKey(u);
+    if (links.some((l) => linkKey(l.url) === key)) {
+      setMsg("You've already got this link in here.");
       return;
     }
     setBusy(true);
