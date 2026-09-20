@@ -109,7 +109,7 @@ var seen={},imgs=[];
 function add(u){if(!u)return;if(u.indexOf('//')===0)u='https:'+u;if(!/^https?:/i.test(u))return;u=norm(u);if(seen[u])return;seen[u]=1;imgs.push(u)}
 var G=window.gallery;
 if(G&&G.offerImgList&&G.offerImgList.length){for(var j=0;j<G.offerImgList.length;j++)add(G.offerImgList[j])}
-else{var og=document.querySelector('meta[property="og:image"]');if(og)add(og.getAttribute('content'));var n=document.querySelectorAll('img');for(var i=0;i<n.length;i++){var s=n[i].getAttribute('src')||n[i].getAttribute('data-src')||n[i].getAttribute('data-lazy-src')||'';if(/alicdn\\.com|yupoo|vpimg|geilicdn/i.test(s))add(s)}}
+else{var og=document.querySelector('meta[property="og:image"]');if(og)add(og.getAttribute('content'));var n=document.querySelectorAll('img');for(var i=0;i<n.length;i++){var im=n[i];var s=im.getAttribute('src')||im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||'';if(!/alicdn\\.com|yupoo|vpimg|geilicdn/i.test(s))continue;var w=im.naturalWidth||im.width||0,h=im.naturalHeight||im.height||0;if(w&&h&&w<200&&h<200)continue;add(s)}}
 imgs=imgs.slice(0,15);
 var ot=document.querySelector('meta[property="og:title"]');
 var title=(G&&G.subject)||(ot&&ot.getAttribute('content'))||document.title||'';
