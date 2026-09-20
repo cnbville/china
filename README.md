@@ -84,6 +84,28 @@ npm install
 npm run dev                        # http://localhost:3000
 ```
 
+## Quick import (from a link)
+
+Turn a listing on 1688 / Taobao / Weidian / Yupoo into a prefilled draft item —
+title, source link, a price guess, and the photos — in one click. It's "assisted
+capture": whatever it grabs lands in the normal add-item form for you to confirm.
+
+How it works: a bookmarklet (installed from the in-app **Quick import** page,
+`/import`) scrapes the page you're viewing and opens the add-item form with that
+data. The browser can't read the CDN images cross-origin, so a small Supabase
+**Edge Function** (`supabase/functions/fetch-image`) fetches their bytes
+server-side and the app re-hosts them into your own storage.
+
+One-time deploy of the Edge Function (needs the Supabase CLI, already linked):
+
+```bash
+supabase functions deploy fetch-image
+```
+
+It's JWT-verified (only your signed-in session can call it) and restricted in
+code to a small allowlist of garment-CDN hosts, so it can't be used as an open
+proxy. No new environment variables — the app finds it under your Supabase URL.
+
 ## Backups
 
 Supabase's own backups depend on your plan; don't lean on them as the only copy.

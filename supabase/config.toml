@@ -30,3 +30,8 @@ enabled = true
 port = 54321
 schemas = ["public", "storage"]
 extra_search_path = ["public", "extensions"]
+
+# Image proxy for the "import from a link" flow. JWT-verified so only the
+# signed-in user can call it (it's also host-allowlisted in code).
+[functions.fetch-image]
+verify_jwt = true
