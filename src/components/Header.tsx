@@ -69,6 +69,14 @@ export function Header() {
           >
             <path d="M12 3a2.2 2.2 0 0 0-1 4.1V9L3 15.5c-1 .8-.5 2.5.8 2.5h16.4c1.3 0 1.8-1.7.8-2.5L13 9V7.1A2.2 2.2 0 0 0 12 3Z" />
           </IconLink>
+          <IconLink
+            href="/measurements"
+            label="Measurements"
+            active={pathname === "/measurements"}
+          >
+            <path d="M14.7 2.8 21.2 9.3a1 1 0 0 1 0 1.4L10.7 21.2a1 1 0 0 1-1.4 0L2.8 14.7a1 1 0 0 1 0-1.4L13.3 2.8a1 1 0 0 1 1.4 0Z" />
+            <path d="M8 7.5 10 9.5M11.5 4 14 6.5M4.5 11 6.5 13" />
+          </IconLink>
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
