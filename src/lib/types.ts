@@ -111,3 +111,26 @@ export type JunkLink = {
   note: string | null;
   created_at: string;
 };
+
+// Measurements (migration 0013), all in cm. A set is a named group of
+// label/value rows; kind says what it represents.
+export type MeasurementKind = "body" | "reference" | "item";
+
+export type MeasurementSet = {
+  id: string;
+  kind: MeasurementKind;
+  name: string;
+  garment_type: string | null;
+  item_id: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type Measurement = {
+  id: string;
+  set_id: string;
+  label: string;
+  value_cm: number | null;
+  position: number;
+  created_at: string;
+};
