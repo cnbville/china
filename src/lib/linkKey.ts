@@ -1,7 +1,10 @@
+import { parseLink } from "./links";
+
 // A canonical identity for a product/link URL, so "the same thing saved twice"
-// is caught even when tracking params differ. Best-effort and host-aware: for
-// the reseller sites we know, it reduces to the product id; otherwise it's the
-// host + path + meaningful query, minus common tracking junk.
+// is caught even when tracking params differ. It reuses the reps link parser
+// (src/lib/links.ts): a direct OR agent link to the same product resolves to the
+// same "marketplace:id" key. Anything it can't resolve falls back to host + path
+// + meaningful query, minus common tracking junk.
 
 const TRACKING = new Set([
   "spm",
@@ -36,24 +39,16 @@ export function linkKey(raw: string): string {
   } catch {
     return t.toLowerCase();
   }
+  // A direct OR agent link the reps parser recognises → "marketplace:id"
+  // (tmall folded into taobao's id space, as before, so they still dedupe).
+  const parsed = parseLink(t);
+  if (parsed) {
+    const mp = parsed.marketplace === "tmall" ? "taobao" : parsed.marketplace;
+    return `${mp}:${parsed.id}`;
+  }
+
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
   const path = u.pathname.replace(/\/+$/, "");
-
-  // 1688: identity is the offer id in the path (/offer/123.html).
-  if (/(^|\.)1688\.com$/.test(host)) {
-    const m = u.pathname.match(/\/offer\/(\d+)/) || t.match(/offer\/(\d+)/);
-    if (m) return `1688:${m[1]}`;
-  }
-  // Taobao / Tmall: the id is a query param.
-  if (/(^|\.)taobao\.com$/.test(host) || /(^|\.)tmall\.com$/.test(host)) {
-    const id = u.searchParams.get("id");
-    if (id) return `taobao:${id}`;
-  }
-  // Weidian: itemID / itemId query param.
-  if (/(^|\.)weidian\.com$/.test(host) || /(^|\.)koudai\.com$/.test(host)) {
-    const id = u.searchParams.get("itemID") || u.searchParams.get("itemId");
-    if (id) return `weidian:${id}`;
-  }
 
   // Generic: host + path + the non-tracking query params, sorted for stability.
   const params = [...u.searchParams.entries()]
