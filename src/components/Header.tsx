@@ -43,10 +43,17 @@ export function Header() {
           </IconLink>
           <IconLink
             href="/convert"
-            label="Convert"
+            label="Currency"
             active={pathname === "/convert"}
           >
             <path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0 3 3m-3-3-3 3" />
+          </IconLink>
+          <IconLink
+            href="/links"
+            label="Link converter"
+            active={pathname === "/links"}
+          >
+            <path d="M9 15l6-6M10.8 6.7l1.6-1.6a3.2 3.2 0 0 1 4.5 4.5l-1.6 1.6M13.2 17.3l-1.6 1.6a3.2 3.2 0 0 1-4.5-4.5l1.6-1.6" />
           </IconLink>
           <IconLink
             href="/later"
