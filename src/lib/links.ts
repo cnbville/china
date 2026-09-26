@@ -95,6 +95,7 @@ export const AGENTS: AgentDef[] = [
   { key: "cnfans", name: "CNFans", hosts: ["cnfans.com"], scheme: "shop_type", base: "https://cnfans.com/product", mpParam: SHOP_TYPE },
   { key: "mulebuy", name: "MuleBuy", hosts: ["mulebuy.com"], scheme: "shop_type", base: "https://mulebuy.com/product", mpParam: SHOP_TYPE },
   { key: "orientdig", name: "OrientDig", hosts: ["orientdig.com"], scheme: "shop_type", base: "https://orientdig.com/product", mpParam: SHOP_TYPE },
+  { key: "lovegobuy", name: "LoveGoBuy", hosts: ["lovegobuy.com"], scheme: "shop_type", base: "https://www.lovegobuy.com/product", mpParam: SHOP_TYPE },
   // path family
   { key: "cssbuy", name: "CSSBUY", hosts: ["cssbuy.com"], scheme: "path" },
 ];
