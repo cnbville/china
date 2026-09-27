@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/Header";
 import { SourceFields } from "@/components/SourceFields";
 import { PriceHint } from "@/components/PriceHint";
+import { AgentLinkButtons } from "@/components/AgentLinkButtons";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
 import { refreshCatalog } from "@/lib/catalogStore";
@@ -655,7 +656,7 @@ function SourceRow({
           <p className="mt-1.5 text-meta text-muted">{source.notes}</p>
         )}
 
-        <div className="mt-2 flex items-center gap-3 text-meta">
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-meta">
           <a
             href={source.url}
             target="_blank"
@@ -664,6 +665,7 @@ function SourceRow({
           >
             Open link ↗
           </a>
+          <AgentLinkButtons url={source.url} />
           <button onClick={onEdit} className="text-muted hover:text-ink">
             Edit
           </button>
