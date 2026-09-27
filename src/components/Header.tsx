@@ -49,6 +49,13 @@ export function Header() {
             <path d="M7 4v13m0 0-3-3m3 3 3-3M17 20V7m0 0 3 3m-3-3-3 3" />
           </IconLink>
           <IconLink
+            href="/agents"
+            label="Shipping agents"
+            active={pathname === "/agents"}
+          >
+            <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
+          </IconLink>
+          <IconLink
             href="/links"
             label="Link converter"
             active={pathname === "/links"}
