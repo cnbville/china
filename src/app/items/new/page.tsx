@@ -21,10 +21,8 @@ import {
   readImportFromHash,
 } from "@/lib/import";
 import { linkKey } from "@/lib/linkKey";
+import { loadLinkIndex, type LinkHit } from "@/lib/linkIndex";
 import type { Category, Collection } from "@/lib/types";
-
-// Where a link already lives, for the duplicate-link warning.
-type LinkHit = { where: "item" | "later" | "junk"; itemId?: string; title?: string };
 
 const DRAFT_KEY = "add-item-draft:v1";
 
@@ -75,51 +73,7 @@ export default function AddItemPage() {
   const loadedDraft = useRef(false);
 
   useEffect(() => {
-    const supabase = createClient();
-    (async () => {
-      const idx = new Map<string, LinkHit>();
-      const put = (k: string, hit: LinkHit) => {
-        if (k && !idx.has(k)) idx.set(k, hit);
-      };
-      try {
-        const [{ data: srcs }, { data: items }] = await Promise.all([
-          supabase.from("sources").select("url, item_id"),
-          supabase.from("items").select("id, title"),
-        ]);
-        const titleById = new Map(
-          ((items ?? []) as { id: string; title: string }[]).map((i) => [
-            i.id,
-            i.title,
-          ]),
-        );
-        for (const r of (srcs ?? []) as { url: string; item_id: string | null }[]) {
-          put(linkKey(r.url), {
-            where: "item",
-            itemId: r.item_id ?? undefined,
-            title: r.item_id ? titleById.get(r.item_id) : undefined,
-          });
-        }
-      } catch {
-        /* ignore */
-      }
-      // Later + Junk are optional (tables may not exist yet) — don't let a
-      // missing table break the whole index.
-      try {
-        const { data } = await supabase.from("saved_links").select("url");
-        for (const r of (data ?? []) as { url: string }[])
-          put(linkKey(r.url), { where: "later" });
-      } catch {
-        /* ignore */
-      }
-      try {
-        const { data } = await supabase.from("junk_links").select("url");
-        for (const r of (data ?? []) as { url: string }[])
-          put(linkKey(r.url), { where: "junk" });
-      } catch {
-        /* ignore */
-      }
-      setLinkIndex(idx);
-    })();
+    loadLinkIndex(createClient()).then(setLinkIndex).catch(() => {});
   }, []);
 
   // On mount: load the datalists, then either apply a quick-import payload from
