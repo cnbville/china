@@ -76,7 +76,6 @@ export default function ConvertPage() {
               <input
                 inputMode="decimal"
                 value={amounts[c]}
-                onFocus={() => setActive(c)}
                 onChange={(e) => {
                   setActive(c);
                   setValue(e.target.value);
