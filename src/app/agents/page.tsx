@@ -8,26 +8,41 @@ import { getRates, type FxData } from "@/lib/fx";
 // Shipping-agent ranking. Kept entirely in this browser (localStorage) — no
 // Supabase — so it's a quick scratch table you can fill in and come back to.
 //
-// Rates are entered the way agents quote them: how many ¥ you get for $1 / €1.
-// Compared against the live market rate, that gives the hidden FX markup; add
-// the cheapest payment method's fee and you get the real total cost.
+// Rates are entered as what the agent charges for ¥1000 in $ / €. Compared
+// against the live market rate, that gives the hidden FX markup; add the
+// cheapest payment method's fee and you get the real total cost.
 
 type Agent = {
   id: string;
   name: string;
-  usd: string; // ¥ per $1 the agent gives
-  eur: string; // ¥ per €1 the agent gives
+  usd: string; // $ the agent charges for ¥1000
+  eur: string; // € the agent charges for ¥1000
   fee: string; // cheapest payment fee, %
 };
 
 type SortKey = "rank" | "name" | "usd" | "eur" | "fee";
 
-const STORE_KEY = "agents:v1";
+const CNY_AMOUNT = 1000;
+const STORE_KEY = "agents:v2";
+const OLD_KEY = "agents:v1"; // stored ¥ per $1 / €1
 
 function load(): Agent[] {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (raw) return JSON.parse(raw) as Agent[];
+    // Migrate v1 (¥ per $1) to v2 ($ per ¥1000).
+    const old = localStorage.getItem(OLD_KEY);
+    if (old) {
+      const flip = (v: string) => {
+        const n = num(v);
+        return n ? String(Number((CNY_AMOUNT / n).toFixed(2))) : v;
+      };
+      return (JSON.parse(old) as Agent[]).map((a) => ({
+        ...a,
+        usd: flip(a.usd),
+        eur: flip(a.eur),
+      }));
+    }
   } catch {
     /* ignore */
   }
@@ -39,11 +54,11 @@ function num(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Total % lost vs. paying at the market rate with no fee.
-function totalCost(agentRate: string, market: number | undefined, fee: string) {
-  const r = num(agentRate);
-  if (r === null || !market) return null;
-  const markup = (1 - r / market) * 100;
+// Total % extra paid vs. the market rate with no fee.
+function totalCost(agentPrice: string, market: number | undefined, fee: string) {
+  const p = num(agentPrice);
+  if (p === null || !market) return null;
+  const markup = (p / market - 1) * 100;
   return markup + (num(fee) ?? 0);
 }
 
@@ -81,9 +96,9 @@ export default function AgentsPage() {
     }
   }, [agents, loaded]);
 
-  // Market ¥ per $1 and ¥ per €1 (fx rates are EUR = 1).
-  const mUsd = fx ? fx.rates.CNY / fx.rates.USD : undefined;
-  const mEur = fx ? fx.rates.CNY : undefined;
+  // Market price of ¥1000 in $ and € (fx rates are EUR = 1).
+  const mUsd = fx ? (CNY_AMOUNT * fx.rates.USD) / fx.rates.CNY : undefined;
+  const mEur = fx ? CNY_AMOUNT / fx.rates.CNY : undefined;
 
   const rows = useMemo(() => {
     const withCost = agents.map((a) => {
@@ -142,15 +157,15 @@ export default function AgentsPage() {
 
   function exportCsv() {
     const lines = [
-      "Name,CNY per USD,CNY per EUR,Cheapest payment %,Market CNY per USD,Market CNY per EUR,Total cost USD %,Total cost EUR %",
+      "Name,USD for 1000 CNY,EUR for 1000 CNY,Cheapest payment %,Market USD for 1000 CNY,Market EUR for 1000 CNY,Total cost USD %,Total cost EUR %",
       ...rows.map(({ a, cUsd, cEur }) =>
         [
           `"${a.name.replace(/"/g, '""')}"`,
           a.usd,
           a.eur,
           a.fee,
-          mUsd?.toFixed(4) ?? "",
-          mEur?.toFixed(4) ?? "",
+          mUsd?.toFixed(2) ?? "",
+          mEur?.toFixed(2) ?? "",
           cUsd?.toFixed(2) ?? "",
           cEur?.toFixed(2) ?? "",
         ].join(","),
@@ -192,7 +207,7 @@ export default function AgentsPage() {
         </div>
         <h1 className="font-serif text-4xl leading-tight">Shipping agents</h1>
         <p className="mt-1 text-meta text-muted">
-          Enter the rate each agent gives (¥ you get for $1 / €1) and their
+          Enter what each agent charges for ¥1000 in $ and €, and their
           cheapest payment fee. Ranked by total cost vs. the market rate — lower
           is better. Saved in this browser only.
         </p>
@@ -210,14 +225,14 @@ export default function AgentsPage() {
           <input
             className="input tnum"
             inputMode="decimal"
-            placeholder={`¥ per $1${mUsd ? ` (mkt ${mUsd.toFixed(3)})` : ""}`}
+            placeholder={`$ for ¥1000${mUsd ? ` (mkt ${mUsd.toFixed(2)})` : ""}`}
             value={draft.usd}
             onChange={(e) => setDraft({ ...draft, usd: e.target.value })}
           />
           <input
             className="input tnum"
             inputMode="decimal"
-            placeholder={`¥ per €1${mEur ? ` (mkt ${mEur.toFixed(3)})` : ""}`}
+            placeholder={`€ for ¥1000${mEur ? ` (mkt ${mEur.toFixed(2)})` : ""}`}
             value={draft.eur}
             onChange={(e) => setDraft({ ...draft, eur: e.target.value })}
           />
@@ -243,8 +258,8 @@ export default function AgentsPage() {
               <tr>
                 {th("rank", "#")}
                 {th("name", "Name")}
-                {th("usd", "→ USD", "¥ per $1 · total cost")}
-                {th("eur", "→ EUR", "¥ per €1 · total cost")}
+                {th("usd", "→ USD", "$ for ¥1000 · total cost")}
+                {th("eur", "→ EUR", "€ for ¥1000 · total cost")}
                 {th("fee", "Cheapest payment", "fee %")}
                 <th className="px-2 py-2 text-left font-normal">
                   Market rate
@@ -285,6 +300,7 @@ export default function AgentsPage() {
                   </td>
                   <td className="px-2 py-1.5">
                     <RateCell
+                      symbol="$"
                       value={a.usd}
                       cost={cUsd}
                       onChange={(v) => update(a.id, { usd: v })}
@@ -292,6 +308,7 @@ export default function AgentsPage() {
                   </td>
                   <td className="px-2 py-1.5">
                     <RateCell
+                      symbol="€"
                       value={a.eur}
                       cost={cEur}
                       onChange={(v) => update(a.id, { eur: v })}
@@ -310,9 +327,9 @@ export default function AgentsPage() {
                   <td className="px-2 py-1.5 text-meta text-muted tnum">
                     {mUsd && mEur ? (
                       <>
-                        $1 = ¥{mUsd.toFixed(4)}
+                        ¥1000 = ${mUsd.toFixed(2)}
                         <br />
-                        €1 = ¥{mEur.toFixed(4)}
+                        ¥1000 = €{mEur.toFixed(2)}
                       </>
                     ) : (
                       "loading…"
@@ -357,7 +374,7 @@ export default function AgentsPage() {
           </span>
         </div>
         <p className="mt-2 text-meta text-muted">
-          Total cost = how much worse the agent&apos;s rate is than market, plus
+          Total cost = how much more the agent charges than market, plus
           the payment fee. Click a column header to sort; click any cell to
           edit.
         </p>
@@ -396,17 +413,19 @@ function Cell({
 }
 
 function RateCell({
+  symbol,
   value,
   cost,
   onChange,
 }: {
+  symbol: string;
   value: string;
   cost: number | null;
   onChange: (v: string) => void;
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-muted">¥</span>
+      <span className="text-muted">{symbol}</span>
       <Cell value={value} numeric onChange={onChange} />
       <span
         title="Total cost vs. market (rate markup + fee)"
