@@ -8,20 +8,31 @@ import { getRates, type FxData } from "@/lib/fx";
 // Shipping-agent ranking. Kept entirely in this browser (localStorage) — no
 // Supabase — so it's a quick scratch table you can fill in and come back to.
 //
-// Rates are entered as what the agent charges for ¥1000 in $ / €, already
-// including their service fee — so that price alone is the real cost. Compared
-// against the live market rate it gives the total markup. The payment-fee
-// column is kept for reference only and isn't added on top.
+// Rates are entered as what the agent charges for ¥1000 in $ / €, WITHOUT the
+// processing fee, so the rate columns show the pure FX upcharge vs. market.
+// The processing fee % is its own column; ranking and the baseline comparison
+// use the all-in price (rate + processing fee). The cheapest-payment column is
+// kept for reference only.
 
 type Agent = {
   id: string;
   name: string;
   usd: string; // $ the agent charges for ¥1000
   eur: string; // € the agent charges for ¥1000
+  proc?: string; // processing fee, % (added on top of the rate)
+  ship?: string; // domestic shipping in China, ¥ (reference, not in ranking)
   fee: string; // cheapest payment fee, % (reference only)
 };
 
-type SortKey = "rank" | "name" | "usd" | "eur" | "fee" | "base";
+type SortKey =
+  | "rank"
+  | "name"
+  | "usd"
+  | "eur"
+  | "proc"
+  | "ship"
+  | "fee"
+  | "base";
 
 const CNY_AMOUNT = 1000;
 const STORE_KEY = "agents:v2";
@@ -56,20 +67,30 @@ function num(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Total % extra paid vs. the market rate (the price already includes fees).
-function totalCost(agentPrice: string, market: number | undefined) {
+// Pure FX upcharge: % the agent's rate is above market (no processing fee).
+function upcharge(agentPrice: string, market: number | undefined) {
   const p = num(agentPrice);
   if (p === null || !market) return null;
   return (p / market - 1) * 100;
 }
 
-// % more (+) or less (−) than the baseline agent charges for the same ¥1000.
-function vsBase(price: string, basePrice: string | undefined): number | null {
+// All-in price for ¥1000: the agent's rate plus the processing fee.
+function allIn(price: string, proc: string | undefined): number | null {
   const p = num(price);
-  const b = basePrice === undefined ? null : num(basePrice);
-  if (p === null || b === null || b === 0) return null;
-  return (p / b - 1) * 100;
+  if (p === null) return null;
+  return p * (1 + (num(proc ?? "") ?? 0) / 100);
 }
+
+// % above market / above baseline for an all-in price.
+function rel(x: number | null, ref: number | null | undefined): number | null {
+  if (x === null || !ref) return null;
+  return (x / ref - 1) * 100;
+}
+
+const minOf = (...xs: (number | null)[]) => {
+  const ns = xs.filter((x): x is number => x !== null);
+  return ns.length ? Math.min(...ns) : null;
+};
 
 function pct(n: number | null): string {
   if (n === null) return "—";
@@ -87,6 +108,8 @@ export default function AgentsPage() {
     name: "",
     usd: "",
     eur: "",
+    proc: "",
+    ship: "",
     fee: "",
   });
 
@@ -128,16 +151,21 @@ export default function AgentsPage() {
   const baseline = agents.find((a) => a.id === baseId) ?? null;
 
   const rows = useMemo(() => {
+    const bUsd = baseline ? allIn(baseline.usd, baseline.proc) : null;
+    const bEur = baseline ? allIn(baseline.eur, baseline.proc) : null;
     const withCost = agents.map((a) => {
-      const cUsd = totalCost(a.usd, mUsd);
-      const cEur = totalCost(a.eur, mEur);
-      const both = [cUsd, cEur].filter((c): c is number => c !== null);
-      const best = both.length ? Math.min(...both) : null;
-      const dUsd = vsBase(a.usd, baseline?.usd);
-      const dEur = vsBase(a.eur, baseline?.eur);
-      const ds = [dUsd, dEur].filter((c): c is number => c !== null);
-      const dBest = ds.length ? Math.min(...ds) : null;
-      return { a, cUsd, cEur, best, dUsd, dEur, dBest };
+      const cUsd = upcharge(a.usd, mUsd);
+      const cEur = upcharge(a.eur, mEur);
+      const aUsd = allIn(a.usd, a.proc);
+      const aEur = allIn(a.eur, a.proc);
+      // All-in % above market — what the ranking uses.
+      const tUsd = rel(aUsd, mUsd);
+      const tEur = rel(aEur, mEur);
+      const best = minOf(tUsd, tEur);
+      const dUsd = rel(aUsd, bUsd);
+      const dEur = rel(aEur, bEur);
+      const dBest = minOf(dUsd, dEur);
+      return { a, cUsd, cEur, aUsd, aEur, tUsd, tEur, best, dUsd, dEur, dBest };
     });
     const nullLast = (x: number | null) => (x === null ? Infinity : x);
     const ranked = [...withCost].sort(
@@ -152,6 +180,10 @@ export default function AgentsPage() {
           return nullLast(x.cUsd) - nullLast(y.cUsd);
         case "eur":
           return nullLast(x.cEur) - nullLast(y.cEur);
+        case "proc":
+          return nullLast(num(x.a.proc ?? "")) - nullLast(num(y.a.proc ?? ""));
+        case "ship":
+          return nullLast(num(x.a.ship ?? "")) - nullLast(num(y.a.ship ?? ""));
         case "fee":
           return nullLast(num(x.a.fee)) - nullLast(num(y.a.fee));
         case "base":
@@ -170,7 +202,7 @@ export default function AgentsPage() {
       ...xs,
       { id: crypto.randomUUID(), ...draft, name: draft.name.trim() },
     ]);
-    setDraft({ name: "", usd: "", eur: "", fee: "" });
+    setDraft({ name: "", usd: "", eur: "", proc: "", ship: "", fee: "" });
   }
 
   function update(id: string, patch: Partial<Agent>) {
@@ -191,17 +223,23 @@ export default function AgentsPage() {
 
   function exportCsv() {
     const lines = [
-      "Name,USD for 1000 CNY,EUR for 1000 CNY,Cheapest payment %,Market USD for 1000 CNY,Market EUR for 1000 CNY,Total cost USD %,Total cost EUR %,vs baseline USD %,vs baseline EUR %",
-      ...rows.map(({ a, cUsd, cEur, dUsd, dEur }) =>
+      "Name,USD for 1000 CNY,EUR for 1000 CNY,Processing fee %,Domestic shipping CNY,Cheapest payment %,Market USD for 1000 CNY,Market EUR for 1000 CNY,Upcharge USD %,Upcharge EUR %,All-in USD,All-in EUR,All-in vs market USD %,All-in vs market EUR %,vs baseline USD %,vs baseline EUR %",
+      ...rows.map(({ a, cUsd, cEur, aUsd, aEur, tUsd, tEur, dUsd, dEur }) =>
         [
           `"${a.name.replace(/"/g, '""')}"`,
           a.usd,
           a.eur,
+          a.proc ?? "",
+          a.ship ?? "",
           a.fee,
           mUsd?.toFixed(2) ?? "",
           mEur?.toFixed(2) ?? "",
           cUsd?.toFixed(2) ?? "",
           cEur?.toFixed(2) ?? "",
+          aUsd?.toFixed(2) ?? "",
+          aEur?.toFixed(2) ?? "",
+          tUsd?.toFixed(2) ?? "",
+          tEur?.toFixed(2) ?? "",
           dUsd?.toFixed(2) ?? "",
           dEur?.toFixed(2) ?? "",
         ].join(","),
@@ -243,15 +281,16 @@ export default function AgentsPage() {
         </div>
         <h1 className="font-serif text-4xl leading-tight">Shipping agents</h1>
         <p className="mt-1 text-meta text-muted">
-          Enter what each agent charges for ¥1000 in $ and € (service fee
-          included), plus their cheapest payment fee for reference. Ranked by
-          total cost vs. the market rate — lower is better. Saved in this
+          Enter what each agent charges for ¥1000 in $ and € (before processing
+          fees), their processing fee %, domestic shipping cost (¥), and their
+          cheapest payment fee for reference. Ranked by all-in cost (rate +
+          processing fee) vs. the market rate — lower is better. Saved in this
           browser only.
         </p>
 
         <form
           onSubmit={add}
-          className="mt-6 grid grid-cols-2 gap-2 rounded-card border border-line bg-card/70 p-4 shadow-lift sm:grid-cols-[2fr_1fr_1fr_1fr_auto]"
+          className="mt-6 grid grid-cols-2 gap-2 rounded-card border border-line bg-card/70 p-4 shadow-lift sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_auto]"
         >
           <input
             className="input col-span-2 sm:col-span-1"
@@ -276,7 +315,21 @@ export default function AgentsPage() {
           <input
             className="input tnum"
             inputMode="decimal"
-            placeholder="Fee %"
+            placeholder="Processing %"
+            value={draft.proc}
+            onChange={(e) => setDraft({ ...draft, proc: e.target.value })}
+          />
+          <input
+            className="input tnum"
+            inputMode="decimal"
+            placeholder="Domestic ship ¥"
+            value={draft.ship}
+            onChange={(e) => setDraft({ ...draft, ship: e.target.value })}
+          />
+          <input
+            className="input tnum"
+            inputMode="decimal"
+            placeholder="Cheapest pay %"
             value={draft.fee}
             onChange={(e) => setDraft({ ...draft, fee: e.target.value })}
           />
@@ -290,13 +343,15 @@ export default function AgentsPage() {
         </form>
 
         <div className="mt-6 overflow-x-auto rounded-card border border-line bg-card/70 shadow-lift">
-          <table className="w-full min-w-[880px] text-body">
+          <table className="w-full min-w-[1100px] text-body">
             <thead className="border-b border-line text-meta text-muted">
               <tr>
                 {th("rank", "#")}
                 {th("name", "Name")}
-                {th("usd", "→ USD", "$ for ¥1000 · total cost")}
-                {th("eur", "→ EUR", "€ for ¥1000 · total cost")}
+                {th("usd", "→ USD", "$ for ¥1000 · upcharge")}
+                {th("eur", "→ EUR", "€ for ¥1000 · upcharge")}
+                {th("proc", "Processing fee", "% · all-in price")}
+                {th("ship", "Domestic shipping", "¥ in China")}
                 {th("fee", "Cheapest payment", "fee %")}
                 <th className="px-2 py-2 text-left font-normal">
                   Market rate
@@ -313,115 +368,158 @@ export default function AgentsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted">
                     No agents yet — add one above.
                   </td>
                 </tr>
               )}
-              {rows.map(({ a, cUsd, cEur, rank, dUsd, dEur }) => (
-                <tr
-                  key={a.id}
-                  className={
-                    "border-b border-line/60 last:border-0 hover:bg-surface2/40 " +
-                    (a.id === baseId ? "bg-surface2/60" : "")
-                  }
-                >
-                  <td className="px-2 py-1.5 text-muted tnum">
-                    <span
-                      className={
-                        rank === 1 && (cUsd !== null || cEur !== null)
-                          ? "font-semibold text-accentSoft"
-                          : ""
-                      }
-                    >
-                      {rank}
-                    </span>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => setBaseId(a.id === baseId ? null : a.id)}
-                        title={
-                          a.id === baseId
-                            ? "Baseline — click to clear"
-                            : "Use as baseline"
-                        }
+              {rows.map(
+                ({
+                  a,
+                  cUsd,
+                  cEur,
+                  aUsd,
+                  aEur,
+                  tUsd,
+                  tEur,
+                  rank,
+                  dUsd,
+                  dEur,
+                }) => (
+                  <tr
+                    key={a.id}
+                    className={
+                      "border-b border-line/60 last:border-0 hover:bg-surface2/40 " +
+                      (a.id === baseId ? "bg-surface2/60" : "")
+                    }
+                  >
+                    <td className="px-2 py-1.5 text-muted tnum">
+                      <span
                         className={
-                          "shrink-0 text-lg leading-none " +
-                          (a.id === baseId
-                            ? "text-amber-400"
-                            : "text-muted/60 hover:text-amber-400")
+                          rank === 1 && (tUsd !== null || tEur !== null)
+                            ? "font-semibold text-accentSoft"
+                            : ""
                         }
                       >
-                        {a.id === baseId ? "★" : "☆"}
+                        {rank}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() =>
+                            setBaseId(a.id === baseId ? null : a.id)
+                          }
+                          title={
+                            a.id === baseId
+                              ? "Baseline — click to clear"
+                              : "Use as baseline"
+                          }
+                          className={
+                            "shrink-0 text-lg leading-none " +
+                            (a.id === baseId
+                              ? "text-amber-400"
+                              : "text-muted/60 hover:text-amber-400")
+                          }
+                        >
+                          {a.id === baseId ? "★" : "☆"}
+                        </button>
+                        <Cell
+                          value={a.name}
+                          onChange={(v) => update(a.id, { name: v })}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <RateCell
+                        symbol="$"
+                        value={a.usd}
+                        cost={cUsd}
+                        onChange={(v) => update(a.id, { usd: v })}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <RateCell
+                        symbol="€"
+                        value={a.eur}
+                        cost={cEur}
+                        onChange={(v) => update(a.id, { eur: v })}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <Cell
+                          value={a.proc ?? ""}
+                          numeric
+                          onChange={(v) => update(a.id, { proc: v })}
+                        />
+                        <span className="text-muted">%</span>
+                      </div>
+                      <div
+                        className="px-1.5 text-[11px] text-muted tnum"
+                        title="All-in price for ¥1000 and % above market"
+                      >
+                        {aUsd !== null && `$${aUsd.toFixed(2)} (${pct(tUsd)})`}
+                        {aUsd !== null && aEur !== null && <br />}
+                        {aEur !== null && `€${aEur.toFixed(2)} (${pct(tEur)})`}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <span className="text-muted">¥</span>
+                        <Cell
+                          value={a.ship ?? ""}
+                          numeric
+                          onChange={(v) => update(a.id, { ship: v })}
+                        />
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <div className="flex items-center gap-1">
+                        <Cell
+                          value={a.fee}
+                          numeric
+                          onChange={(v) => update(a.id, { fee: v })}
+                        />
+                        <span className="text-muted">%</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-meta text-muted tnum">
+                      {mUsd && mEur ? (
+                        <>
+                          ¥1000 = ${mUsd.toFixed(2)}
+                          <br />
+                          ¥1000 = €{mEur.toFixed(2)}
+                        </>
+                      ) : (
+                        "loading…"
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-meta tnum">
+                      {!baseline ? (
+                        <span className="text-muted">—</span>
+                      ) : a.id === baseId ? (
+                        <span className="text-amber-400">baseline</span>
+                      ) : (
+                        <>
+                          <Diff label="$" d={dUsd} />
+                          <br />
+                          <Diff label="€" d={dEur} />
+                        </>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <button
+                        onClick={() => remove(a.id, a.name)}
+                        title="Delete"
+                        className="rounded-card p-1 text-muted hover:bg-surface2 hover:text-accentSoft"
+                      >
+                        ✕
                       </button>
-                      <Cell
-                        value={a.name}
-                        onChange={(v) => update(a.id, { name: v })}
-                      />
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <RateCell
-                      symbol="$"
-                      value={a.usd}
-                      cost={cUsd}
-                      onChange={(v) => update(a.id, { usd: v })}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <RateCell
-                      symbol="€"
-                      value={a.eur}
-                      cost={cEur}
-                      onChange={(v) => update(a.id, { eur: v })}
-                    />
-                  </td>
-                  <td className="px-2 py-1.5">
-                    <div className="flex items-center gap-1">
-                      <Cell
-                        value={a.fee}
-                        numeric
-                        onChange={(v) => update(a.id, { fee: v })}
-                      />
-                      <span className="text-muted">%</span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-1.5 text-meta text-muted tnum">
-                    {mUsd && mEur ? (
-                      <>
-                        ¥1000 = ${mUsd.toFixed(2)}
-                        <br />
-                        ¥1000 = €{mEur.toFixed(2)}
-                      </>
-                    ) : (
-                      "loading…"
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-meta tnum">
-                    {!baseline ? (
-                      <span className="text-muted">—</span>
-                    ) : a.id === baseId ? (
-                      <span className="text-amber-400">baseline</span>
-                    ) : (
-                      <>
-                        <Diff label="$" d={dUsd} />
-                        <br />
-                        <Diff label="€" d={dEur} />
-                      </>
-                    )}
-                  </td>
-                  <td className="px-2 py-1.5 text-right">
-                    <button
-                      onClick={() => remove(a.id, a.name)}
-                      title="Delete"
-                      className="rounded-card p-1 text-muted hover:bg-surface2 hover:text-accentSoft"
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                ),
+              )}
             </tbody>
           </table>
         </div>
@@ -450,11 +548,12 @@ export default function AgentsPage() {
           </span>
         </div>
         <p className="mt-2 text-meta text-muted">
-          Total cost = how much more the agent charges than market (your prices
-          already include the service fee, so nothing is added on top). Tap ☆ to
-          make an agent the baseline — every other agent then shows how much
-          cheaper (green, −) or pricier (red, +) it is than the baseline. Click
-          a column header to sort; click any cell to edit.
+          Upcharge (next to each rate) = how much worse the agent&apos;s rate is
+          than market, before processing fees. All-in (under the processing fee)
+          = rate + processing fee, and is what the ranking uses. Tap ☆ to make
+          an agent the baseline — every other agent then shows how much cheaper
+          (green, −) or pricier (red, +) it is all-in. Click a column header to
+          sort; click any cell to edit.
         </p>
 
         <p className="mt-10 text-meta">
@@ -525,7 +624,7 @@ function RateCell({
       <span className="text-muted">{symbol}</span>
       <Cell value={value} numeric onChange={onChange} />
       <span
-        title="Total cost vs. market (fees included in your price)"
+        title="FX upcharge vs. market (before processing fees)"
         className={
           "shrink-0 text-meta tnum " +
           (cost === null
