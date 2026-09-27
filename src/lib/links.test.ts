@@ -11,6 +11,8 @@ import {
   extractLinkEntries,
   extractLinks,
   parseLink,
+  marketplaceUrl,
+  twinMarketplace,
   type Marketplace,
   type ParsedLink,
 } from "./links";
@@ -35,6 +37,24 @@ const directCases: [string, ParsedLink][] = [
     { marketplace: "1688", id: "654321" },
   ],
   ["https://m.1688.com/offer/654321.html", { marketplace: "1688", id: "654321" }],
+  // Mobile / app-share / international variants, tracking junk and all
+  [
+    "https://h5.m.taobao.com/awp/core/detail.htm?ft=t&id=678901234567&spm=a2141.1",
+    { marketplace: "taobao", id: "678901234567" },
+  ],
+  ["https://m.intl.taobao.com/detail/detail.html?id=678901234567", { marketplace: "taobao", id: "678901234567" }],
+  ["https://a.m.taobao.com/i678901234567.htm?sm=1", { marketplace: "taobao", id: "678901234567" }],
+  [
+    "https://detail.m.tmall.com/item.htm?spm=a1z10&id=612345678901&skuId=5",
+    { marketplace: "tmall", id: "612345678901" },
+  ],
+  ["https://detail.tmall.hk/hk/item.htm?id=612345678901", { marketplace: "tmall", id: "612345678901" }],
+  [
+    "https://shop1234567.v.weidian.com/item.html?itemID=7212345678&wfr=wx&share_relation=abc",
+    { marketplace: "weidian", id: "7212345678" },
+  ],
+  ["https://weidian.com/item.html?itemId=7212345678&p=iphone", { marketplace: "weidian", id: "7212345678" }],
+  ["https://detail.m.1688.com/page/index.html?offerId=654321987&spm=x", { marketplace: "1688", id: "654321987" }],
 ];
 
 for (const [url, want] of directCases) {
@@ -280,4 +300,37 @@ test("every agent has a working build for every marketplace", () => {
       assert.ok(AGENTS_BY_KEY[a.key]);
     }
   }
+});
+
+// --- Reverse: agent link → the original marketplace link ---
+test("reverse: every agent link comes back to the clean original", () => {
+  for (const agent of AGENTS) {
+    for (const p of samples) {
+      const back = parseLink(buildAgentLink(agent.key, p) as string);
+      assert.ok(back, agent.key);
+      assert.equal(marketplaceUrl(back.marketplace, back.id), marketplaceUrl(p.marketplace, p.id));
+    }
+  }
+});
+
+test("reverse: the user's CSSBuy link → the raw Weidian link", () => {
+  const p = parseLink(
+    "https://www.cssbuy.com/shop/goodsDetail?type=micro&id=7832622051&promotionCode=dXVmaW5kcw",
+  );
+  assert.ok(p);
+  assert.equal(marketplaceUrl(p.marketplace, p.id), "https://weidian.com/item.html?itemID=7832622051");
+});
+
+test("reverse: a Tmall link wrapped by an agent stays Tmall", () => {
+  const wrapped =
+    "https://www.superbuy.com/en/page/buy/?url=" +
+    encodeURIComponent("https://detail.tmall.com/item.htm?id=612345678901&spm=x");
+  assert.deepEqual(parseLink(wrapped), { marketplace: "tmall", id: "612345678901" });
+});
+
+test("twinMarketplace: Taobao ⇄ Tmall only", () => {
+  assert.equal(twinMarketplace("taobao"), "tmall");
+  assert.equal(twinMarketplace("tmall"), "taobao");
+  assert.equal(twinMarketplace("weidian"), null);
+  assert.equal(twinMarketplace("1688"), null);
 });
