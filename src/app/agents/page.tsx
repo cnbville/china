@@ -20,11 +20,12 @@ type Agent = {
   fee: string; // cheapest payment fee, %
 };
 
-type SortKey = "rank" | "name" | "usd" | "eur" | "fee";
+type SortKey = "rank" | "name" | "usd" | "eur" | "fee" | "base";
 
 const CNY_AMOUNT = 1000;
 const STORE_KEY = "agents:v2";
 const OLD_KEY = "agents:v1"; // stored ¥ per $1 / €1
+const BASE_KEY = "agents:baseline";
 
 function load(): Agent[] {
   try {
@@ -55,11 +56,28 @@ function num(s: string): number | null {
 }
 
 // Total % extra paid vs. the market rate with no fee.
-function totalCost(agentPrice: string, market: number | undefined, fee: string) {
+function totalCost(
+  agentPrice: string,
+  market: number | undefined,
+  fee: string,
+) {
   const p = num(agentPrice);
   if (p === null || !market) return null;
   const markup = (p / market - 1) * 100;
   return markup + (num(fee) ?? 0);
+}
+
+// What ¥1000 really costs with this agent: their price plus the payment fee.
+function effective(price: string, fee: string): number | null {
+  const p = num(price);
+  if (p === null) return null;
+  return p * (1 + (num(fee) ?? 0) / 100);
+}
+
+// % more (+) or less (−) than the baseline agent pays for the same ¥1000.
+function vsBase(e: number | null, base: number | null): number | null {
+  if (e === null || base === null || base === 0) return null;
+  return (e / base - 1) * 100;
 }
 
 function pct(n: number | null): string {
@@ -73,6 +91,7 @@ export default function AgentsPage() {
   const [fx, setFx] = useState<FxData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<SortKey>("rank");
+  const [baseId, setBaseId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Omit<Agent, "id">>({
     name: "",
     usd: "",
@@ -82,6 +101,11 @@ export default function AgentsPage() {
 
   useEffect(() => {
     setAgents(load());
+    try {
+      setBaseId(localStorage.getItem(BASE_KEY));
+    } catch {
+      /* ignore */
+    }
     setLoaded(true);
     getRates().then(setFx);
   }, []);
@@ -96,17 +120,35 @@ export default function AgentsPage() {
     }
   }, [agents, loaded]);
 
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      if (baseId) localStorage.setItem(BASE_KEY, baseId);
+      else localStorage.removeItem(BASE_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [baseId, loaded]);
+
   // Market price of ¥1000 in $ and € (fx rates are EUR = 1).
   const mUsd = fx ? (CNY_AMOUNT * fx.rates.USD) / fx.rates.CNY : undefined;
   const mEur = fx ? CNY_AMOUNT / fx.rates.CNY : undefined;
 
+  const baseline = agents.find((a) => a.id === baseId) ?? null;
+
   const rows = useMemo(() => {
+    const bUsd = baseline ? effective(baseline.usd, baseline.fee) : null;
+    const bEur = baseline ? effective(baseline.eur, baseline.fee) : null;
     const withCost = agents.map((a) => {
       const cUsd = totalCost(a.usd, mUsd, a.fee);
       const cEur = totalCost(a.eur, mEur, a.fee);
       const both = [cUsd, cEur].filter((c): c is number => c !== null);
       const best = both.length ? Math.min(...both) : null;
-      return { a, cUsd, cEur, best };
+      const dUsd = vsBase(effective(a.usd, a.fee), bUsd);
+      const dEur = vsBase(effective(a.eur, a.fee), bEur);
+      const ds = [dUsd, dEur].filter((c): c is number => c !== null);
+      const dBest = ds.length ? Math.min(...ds) : null;
+      return { a, cUsd, cEur, best, dUsd, dEur, dBest };
     });
     const nullLast = (x: number | null) => (x === null ? Infinity : x);
     const ranked = [...withCost].sort(
@@ -123,12 +165,14 @@ export default function AgentsPage() {
           return nullLast(x.cEur) - nullLast(y.cEur);
         case "fee":
           return nullLast(num(x.a.fee)) - nullLast(num(y.a.fee));
+        case "base":
+          return nullLast(x.dBest) - nullLast(y.dBest);
         default:
           return rankOf.get(x.a.id)! - rankOf.get(y.a.id)!;
       }
     });
     return sorted.map((r) => ({ ...r, rank: rankOf.get(r.a.id)! }));
-  }, [agents, mUsd, mEur, sort]);
+  }, [agents, mUsd, mEur, sort, baseline]);
 
   function add(e: React.FormEvent) {
     e.preventDefault();
@@ -147,6 +191,7 @@ export default function AgentsPage() {
   function remove(id: string, name: string) {
     if (!confirm(`Delete ${name || "this agent"}?`)) return;
     setAgents((xs) => xs.filter((a) => a.id !== id));
+    if (id === baseId) setBaseId(null);
   }
 
   async function refresh() {
@@ -157,8 +202,8 @@ export default function AgentsPage() {
 
   function exportCsv() {
     const lines = [
-      "Name,USD for 1000 CNY,EUR for 1000 CNY,Cheapest payment %,Market USD for 1000 CNY,Market EUR for 1000 CNY,Total cost USD %,Total cost EUR %",
-      ...rows.map(({ a, cUsd, cEur }) =>
+      "Name,USD for 1000 CNY,EUR for 1000 CNY,Cheapest payment %,Market USD for 1000 CNY,Market EUR for 1000 CNY,Total cost USD %,Total cost EUR %,vs baseline USD %,vs baseline EUR %",
+      ...rows.map(({ a, cUsd, cEur, dUsd, dEur }) =>
         [
           `"${a.name.replace(/"/g, '""')}"`,
           a.usd,
@@ -168,6 +213,8 @@ export default function AgentsPage() {
           mEur?.toFixed(2) ?? "",
           cUsd?.toFixed(2) ?? "",
           cEur?.toFixed(2) ?? "",
+          dUsd?.toFixed(2) ?? "",
+          dEur?.toFixed(2) ?? "",
         ].join(","),
       ),
     ];
@@ -207,9 +254,9 @@ export default function AgentsPage() {
         </div>
         <h1 className="font-serif text-4xl leading-tight">Shipping agents</h1>
         <p className="mt-1 text-meta text-muted">
-          Enter what each agent charges for ¥1000 in $ and €, and their
-          cheapest payment fee. Ranked by total cost vs. the market rate — lower
-          is better. Saved in this browser only.
+          Enter what each agent charges for ¥1000 in $ and €, and their cheapest
+          payment fee. Ranked by total cost vs. the market rate — lower is
+          better. Saved in this browser only.
         </p>
 
         <form
@@ -253,7 +300,7 @@ export default function AgentsPage() {
         </form>
 
         <div className="mt-6 overflow-x-auto rounded-card border border-line bg-card/70 shadow-lift">
-          <table className="w-full min-w-[760px] text-body">
+          <table className="w-full min-w-[880px] text-body">
             <thead className="border-b border-line text-meta text-muted">
               <tr>
                 {th("rank", "#")}
@@ -265,21 +312,29 @@ export default function AgentsPage() {
                   Market rate
                   <span className="block text-[11px]">live</span>
                 </th>
+                {th(
+                  "base",
+                  "vs baseline",
+                  baseline ? `vs ${baseline.name || "baseline"}` : "pick a ☆",
+                )}
                 <th />
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted">
                     No agents yet — add one above.
                   </td>
                 </tr>
               )}
-              {rows.map(({ a, cUsd, cEur, rank }) => (
+              {rows.map(({ a, cUsd, cEur, rank, dUsd, dEur }) => (
                 <tr
                   key={a.id}
-                  className="border-b border-line/60 last:border-0 hover:bg-surface2/40"
+                  className={
+                    "border-b border-line/60 last:border-0 hover:bg-surface2/40 " +
+                    (a.id === baseId ? "bg-surface2/60" : "")
+                  }
                 >
                   <td className="px-2 py-1.5 text-muted tnum">
                     <span
@@ -293,10 +348,28 @@ export default function AgentsPage() {
                     </span>
                   </td>
                   <td className="px-2 py-1.5">
-                    <Cell
-                      value={a.name}
-                      onChange={(v) => update(a.id, { name: v })}
-                    />
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setBaseId(a.id === baseId ? null : a.id)}
+                        title={
+                          a.id === baseId
+                            ? "Baseline — click to clear"
+                            : "Use as baseline"
+                        }
+                        className={
+                          "shrink-0 text-lg leading-none " +
+                          (a.id === baseId
+                            ? "text-amber-400"
+                            : "text-muted/60 hover:text-amber-400")
+                        }
+                      >
+                        {a.id === baseId ? "★" : "☆"}
+                      </button>
+                      <Cell
+                        value={a.name}
+                        onChange={(v) => update(a.id, { name: v })}
+                      />
+                    </div>
                   </td>
                   <td className="px-2 py-1.5">
                     <RateCell
@@ -333,6 +406,19 @@ export default function AgentsPage() {
                       </>
                     ) : (
                       "loading…"
+                    )}
+                  </td>
+                  <td className="px-2 py-1.5 text-meta tnum">
+                    {!baseline ? (
+                      <span className="text-muted">—</span>
+                    ) : a.id === baseId ? (
+                      <span className="text-amber-400">baseline</span>
+                    ) : (
+                      <>
+                        <Diff label="$" d={dUsd} />
+                        <br />
+                        <Diff label="€" d={dEur} />
+                      </>
                     )}
                   </td>
                   <td className="px-2 py-1.5 text-right">
@@ -374,9 +460,11 @@ export default function AgentsPage() {
           </span>
         </div>
         <p className="mt-2 text-meta text-muted">
-          Total cost = how much more the agent charges than market, plus
-          the payment fee. Click a column header to sort; click any cell to
-          edit.
+          Total cost = how much more the agent charges than market, plus the
+          payment fee. Tap ☆ to make an agent the baseline — every other agent
+          then shows how much cheaper (green, −) or pricier (red, +) it is than
+          the baseline, fee included. Click a column header to sort; click any
+          cell to edit.
         </p>
 
         <p className="mt-10 text-meta">
@@ -386,6 +474,25 @@ export default function AgentsPage() {
         </p>
       </main>
     </>
+  );
+}
+
+// Negative = cheaper than the baseline (good), positive = pricier.
+function Diff({ label, d }: { label: string; d: number | null }) {
+  return (
+    <span
+      className={
+        d === null
+          ? "text-muted"
+          : d < -0.005
+            ? "text-emerald-400"
+            : d > 0.005
+              ? "text-accentSoft"
+              : "text-muted"
+      }
+    >
+      {label} {pct(d)}
+    </span>
   );
 }
 
