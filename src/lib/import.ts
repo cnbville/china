@@ -21,8 +21,6 @@ export type ImportPayload = {
   images?: string[]; // remote image URLs to re-host
 };
 
-const MAX_IMPORT_IMAGES = 12;
-
 /** Read an import payload out of the current URL hash, if the bookmarklet set one. */
 export function readImportFromHash(): ImportPayload | null {
   if (typeof window === "undefined") return null;
@@ -42,11 +40,12 @@ export function buildImportHash(p: ImportPayload): string {
   return "#import=" + encodeURIComponent(JSON.stringify(p));
 }
 
-/** How many images (capped) the payload wants re-hosted. */
+/** Every image the payload wants re-hosted (no cap — you prune in the form). */
 export function importImageUrls(p: ImportPayload): string[] {
-  return (p.images ?? [])
-    .filter((u): u is string => typeof u === "string" && u.length > 0)
-    .slice(0, MAX_IMPORT_IMAGES);
+  const urls = (p.images ?? []).filter(
+    (u): u is string => typeof u === "string" && u.length > 0,
+  );
+  return Array.from(new Set(urls));
 }
 
 function extFromMime(mime: string): string {
@@ -115,7 +114,6 @@ function add(u){if(!u)return;if(u.indexOf('//')===0)u='https:'+u;if(!/^https?:/i
 var G=window.gallery;
 if(G&&G.offerImgList&&G.offerImgList.length){for(var j=0;j<G.offerImgList.length;j++)add(G.offerImgList[j])}
 else{var og=document.querySelector('meta[property="og:image"]');if(og)add(og.getAttribute('content'));var n=document.querySelectorAll('img');for(var i=0;i<n.length;i++){var im=n[i];var s=im.getAttribute('src')||im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||'';if(!/alicdn\\.com|yupoo|vpimg|geilicdn/i.test(s))continue;var w=im.naturalWidth||im.width||0,h=im.naturalHeight||im.height||0;if(w&&h&&w<200&&h<200)continue;add(s)}}
-imgs=imgs.slice(0,15);
 var ot=document.querySelector('meta[property="og:title"]');
 var title=(G&&G.subject)||(ot&&ot.getAttribute('content'))||document.title||'';
 var price='';var pm=(document.body.innerText||'').match(/[\\u00a5\\uffe5]\\s*([0-9]+(?:\\.[0-9]+)?)/);if(pm)price=pm[1];
