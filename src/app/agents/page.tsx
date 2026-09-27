@@ -8,16 +8,17 @@ import { getRates, type FxData } from "@/lib/fx";
 // Shipping-agent ranking. Kept entirely in this browser (localStorage) — no
 // Supabase — so it's a quick scratch table you can fill in and come back to.
 //
-// Rates are entered as what the agent charges for ¥1000 in $ / €. Compared
-// against the live market rate, that gives the hidden FX markup; add the
-// cheapest payment method's fee and you get the real total cost.
+// Rates are entered as what the agent charges for ¥1000 in $ / €, already
+// including their service fee — so that price alone is the real cost. Compared
+// against the live market rate it gives the total markup. The payment-fee
+// column is kept for reference only and isn't added on top.
 
 type Agent = {
   id: string;
   name: string;
   usd: string; // $ the agent charges for ¥1000
   eur: string; // € the agent charges for ¥1000
-  fee: string; // cheapest payment fee, %
+  fee: string; // cheapest payment fee, % (reference only)
 };
 
 type SortKey = "rank" | "name" | "usd" | "eur" | "fee" | "base";
@@ -55,29 +56,19 @@ function num(s: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// Total % extra paid vs. the market rate with no fee.
-function totalCost(
-  agentPrice: string,
-  market: number | undefined,
-  fee: string,
-) {
+// Total % extra paid vs. the market rate (the price already includes fees).
+function totalCost(agentPrice: string, market: number | undefined) {
   const p = num(agentPrice);
   if (p === null || !market) return null;
-  const markup = (p / market - 1) * 100;
-  return markup + (num(fee) ?? 0);
+  return (p / market - 1) * 100;
 }
 
-// What ¥1000 really costs with this agent: their price plus the payment fee.
-function effective(price: string, fee: string): number | null {
+// % more (+) or less (−) than the baseline agent charges for the same ¥1000.
+function vsBase(price: string, basePrice: string | undefined): number | null {
   const p = num(price);
-  if (p === null) return null;
-  return p * (1 + (num(fee) ?? 0) / 100);
-}
-
-// % more (+) or less (−) than the baseline agent pays for the same ¥1000.
-function vsBase(e: number | null, base: number | null): number | null {
-  if (e === null || base === null || base === 0) return null;
-  return (e / base - 1) * 100;
+  const b = basePrice === undefined ? null : num(basePrice);
+  if (p === null || b === null || b === 0) return null;
+  return (p / b - 1) * 100;
 }
 
 function pct(n: number | null): string {
@@ -137,15 +128,13 @@ export default function AgentsPage() {
   const baseline = agents.find((a) => a.id === baseId) ?? null;
 
   const rows = useMemo(() => {
-    const bUsd = baseline ? effective(baseline.usd, baseline.fee) : null;
-    const bEur = baseline ? effective(baseline.eur, baseline.fee) : null;
     const withCost = agents.map((a) => {
-      const cUsd = totalCost(a.usd, mUsd, a.fee);
-      const cEur = totalCost(a.eur, mEur, a.fee);
+      const cUsd = totalCost(a.usd, mUsd);
+      const cEur = totalCost(a.eur, mEur);
       const both = [cUsd, cEur].filter((c): c is number => c !== null);
       const best = both.length ? Math.min(...both) : null;
-      const dUsd = vsBase(effective(a.usd, a.fee), bUsd);
-      const dEur = vsBase(effective(a.eur, a.fee), bEur);
+      const dUsd = vsBase(a.usd, baseline?.usd);
+      const dEur = vsBase(a.eur, baseline?.eur);
       const ds = [dUsd, dEur].filter((c): c is number => c !== null);
       const dBest = ds.length ? Math.min(...ds) : null;
       return { a, cUsd, cEur, best, dUsd, dEur, dBest };
@@ -254,9 +243,10 @@ export default function AgentsPage() {
         </div>
         <h1 className="font-serif text-4xl leading-tight">Shipping agents</h1>
         <p className="mt-1 text-meta text-muted">
-          Enter what each agent charges for ¥1000 in $ and €, and their cheapest
-          payment fee. Ranked by total cost vs. the market rate — lower is
-          better. Saved in this browser only.
+          Enter what each agent charges for ¥1000 in $ and € (service fee
+          included), plus their cheapest payment fee for reference. Ranked by
+          total cost vs. the market rate — lower is better. Saved in this
+          browser only.
         </p>
 
         <form
@@ -460,11 +450,11 @@ export default function AgentsPage() {
           </span>
         </div>
         <p className="mt-2 text-meta text-muted">
-          Total cost = how much more the agent charges than market, plus the
-          payment fee. Tap ☆ to make an agent the baseline — every other agent
-          then shows how much cheaper (green, −) or pricier (red, +) it is than
-          the baseline, fee included. Click a column header to sort; click any
-          cell to edit.
+          Total cost = how much more the agent charges than market (your prices
+          already include the service fee, so nothing is added on top). Tap ☆ to
+          make an agent the baseline — every other agent then shows how much
+          cheaper (green, −) or pricier (red, +) it is than the baseline. Click
+          a column header to sort; click any cell to edit.
         </p>
 
         <p className="mt-10 text-meta">
@@ -535,7 +525,7 @@ function RateCell({
       <span className="text-muted">{symbol}</span>
       <Cell value={value} numeric onChange={onChange} />
       <span
-        title="Total cost vs. market (rate markup + fee)"
+        title="Total cost vs. market (fees included in your price)"
         className={
           "shrink-0 text-meta tnum " +
           (cost === null
