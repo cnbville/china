@@ -25,7 +25,8 @@ type SortKey =
   | "ship"
   | "fee"
   | "base"
-  | "order";
+  | "order"
+  | "ordership";
 
 const CNY_AMOUNT = 1000;
 const STORE_KEY = "agents:v2";
@@ -234,7 +235,8 @@ export default function AgentsPage() {
       const oEur = scale(aEur, amt ?? 0);
       const sUsd = ship ? scale(aUsd, (amt ?? 0) + ship) : null;
       const sEur = ship ? scale(aEur, (amt ?? 0) + ship) : null;
-      const oSort = sUsd ?? oUsd ?? sEur ?? oEur;
+      const oSort = oUsd ?? oEur;
+      const sSort = sUsd ?? sEur;
       return {
         a,
         cUsd,
@@ -252,6 +254,7 @@ export default function AgentsPage() {
         sUsd,
         sEur,
         oSort,
+        sSort,
       };
     });
     const nullLast = (x: number | null) => (x === null ? Infinity : x);
@@ -277,6 +280,8 @@ export default function AgentsPage() {
           return nullLast(x.dBest) - nullLast(y.dBest);
         case "order":
           return nullLast(x.oSort) - nullLast(y.oSort);
+        case "ordership":
+          return nullLast(x.sSort) - nullLast(y.sSort);
         default:
           return rankOf.get(x.a.id)! - rankOf.get(y.a.id)!;
       }
@@ -432,14 +437,20 @@ export default function AgentsPage() {
         </form>
 
         <div className="mt-6 overflow-x-auto rounded-card border border-line bg-card/70 shadow-lift">
-          <table className="w-full min-w-[1240px] text-body">
+          <table className="w-full min-w-[1400px] text-body">
             <thead className="border-b border-line text-meta text-muted">
               <tr>
                 {th("rank", "#")}
                 {th("name", "Name")}
                 {th("usd", "→ USD", "$ for ¥1000 · upcharge")}
                 {th("eur", "→ EUR", "€ for ¥1000 · upcharge")}
-                {th("proc", "Processing fee", "% · all-in price")}
+                {th("proc", "Processing fee", "%")}
+                <th className="px-2 py-2 text-left font-normal">
+                  All-in
+                  <span className="block text-[11px]">
+                    ¥1000 incl. processing
+                  </span>
+                </th>
                 {th("ship", "Domestic shipping", "¥ in China")}
                 <th className="px-2 py-2 text-left font-normal">
                   <button
@@ -462,6 +473,7 @@ export default function AgentsPage() {
                     />
                   </label>
                 </th>
+                {th("ordership", "Order + shipping", "incl. domestic shipping")}
                 {th("fee", "Cheapest payment", "fee %")}
                 <th className="px-2 py-2 text-left font-normal">
                   Market rate
@@ -478,7 +490,7 @@ export default function AgentsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={13} className="px-3 py-8 text-center text-muted">
                     No agents yet — add one above.
                   </td>
                 </tr>
@@ -569,14 +581,17 @@ export default function AgentsPage() {
                         />
                         <span className="text-muted">%</span>
                       </div>
-                      <div
-                        className="px-1.5 text-[11px] text-muted tnum"
-                        title="All-in price for ¥1000 and % above market"
-                      >
-                        {aUsd !== null && `$${aUsd.toFixed(2)} (${pct(tUsd)})`}
-                        {aUsd !== null && aEur !== null && <br />}
-                        {aEur !== null && `€${aEur.toFixed(2)} (${pct(tEur)})`}
-                      </div>
+                    </td>
+                    <td
+                      className="px-2 py-1.5 text-meta tnum"
+                      title="All-in price for ¥1000 and % above market"
+                    >
+                      <Money
+                        usd={aUsd}
+                        eur={aEur}
+                        usdPct={tUsd}
+                        eurPct={tEur}
+                      />
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
@@ -589,34 +604,10 @@ export default function AgentsPage() {
                       </div>
                     </td>
                     <td className="px-2 py-1.5 text-meta tnum">
-                      {oUsd === null && oEur === null ? (
-                        <span className="text-muted">—</span>
-                      ) : (
-                        <>
-                          <div>
-                            {[
-                              oUsd !== null && `$${oUsd.toFixed(2)}`,
-                              oEur !== null && `€${oEur.toFixed(2)}`,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </div>
-                          {(sUsd !== null || sEur !== null) && (
-                            <div
-                              className="text-[11px] text-muted"
-                              title="Including this agent's domestic shipping"
-                            >
-                              +ship:{" "}
-                              {[
-                                sUsd !== null && `$${sUsd.toFixed(2)}`,
-                                sEur !== null && `€${sEur.toFixed(2)}`,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </div>
-                          )}
-                        </>
-                      )}
+                      <Money usd={oUsd} eur={oEur} />
+                    </td>
+                    <td className="px-2 py-1.5 text-meta tnum">
+                      <Money usd={sUsd} eur={sEur} />
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
@@ -705,13 +696,13 @@ export default function AgentsPage() {
         </div>
         <p className="mt-2 text-meta text-muted">
           Upcharge (next to each rate) = how much worse the agent&apos;s rate is
-          than market, before processing fees. All-in (under the processing fee)
-          = rate + processing fee, and is what the ranking uses. Tap ☆ to make
-          an agent the baseline — every other agent then shows how much cheaper
-          (green, −) or pricier (red, +) it is all-in. Click a column header to
-          sort; click any cell to edit. Your order = what the ¥ amount in that
-          column header costs with each agent (all-in), and underneath the same
-          with their domestic shipping added.
+          than market, before processing fees. All-in = rate + processing fee,
+          and is what the ranking uses. Tap ☆ to make an agent the baseline —
+          every other agent then shows how much cheaper (green, −) or pricier
+          (red, +) it is all-in. Click a column header to sort; click any cell
+          to edit. Your order = what the ¥ amount in that column header costs
+          with each agent (all-in); Order + shipping adds their domestic
+          shipping.
         </p>
 
         <p className="mt-10 text-meta">
@@ -720,6 +711,38 @@ export default function AgentsPage() {
           </Link>
         </p>
       </main>
+    </>
+  );
+}
+
+// A $ line over a € line, optionally each with its % above market.
+function Money({
+  usd,
+  eur,
+  usdPct,
+  eurPct,
+}: {
+  usd: number | null;
+  eur: number | null;
+  usdPct?: number | null;
+  eurPct?: number | null;
+}) {
+  if (usd === null && eur === null)
+    return <span className="text-muted">—</span>;
+  const line = (sym: string, v: number | null, p?: number | null) =>
+    v === null ? null : (
+      <div>
+        {sym}
+        {v.toFixed(2)}
+        {p !== undefined && p !== null && (
+          <span className="ml-1 text-[11px] text-muted">{pct(p)}</span>
+        )}
+      </div>
+    );
+  return (
+    <>
+      {line("$", usd, usdPct)}
+      {line("€", eur, eurPct)}
     </>
   );
 }
