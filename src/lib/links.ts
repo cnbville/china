@@ -41,12 +41,19 @@ export function parseDirect(u: URL): ParsedLink | null {
   if (/(^|\.)taobao\.com$/.test(host)) {
     const id = u.searchParams.get("id");
     if (id) return { marketplace: "taobao", id };
+    // world.taobao.com/item/123.htm (and similar path-style item pages)
+    const m = u.pathname.match(/\/item\/(\d{6,})/);
+    if (m) return { marketplace: "taobao", id: m[1] };
   }
   if (/(^|\.)tmall\.com$/.test(host)) {
     const id = u.searchParams.get("id");
     if (id) return { marketplace: "tmall", id };
   }
-  if (/(^|\.)weidian\.com$/.test(host) || /(^|\.)koudai\.com$/.test(host)) {
+  if (
+    /(^|\.)weidian\.com$/.test(host) ||
+    /(^|\.)koudai\.com$/.test(host) ||
+    /(^|\.)youshop10\.com$/.test(host)
+  ) {
     const id = u.searchParams.get("itemID") || u.searchParams.get("itemId");
     if (id) return { marketplace: "weidian", id };
   }
@@ -58,50 +65,154 @@ export function parseDirect(u: URL): ParsedLink | null {
 }
 
 // --- Agent definitions -------------------------------------------------------
-// Three schemes cover the ecosystem:
-//   encoded_url — the agent wraps the full marketplace URL in a query param
-//                 (safest: the inner link is our own canonical one)
-//   shop_type   — ?shop_type=<mp>&id=<id> (the newer affiliate family)
-//   path        — id baked into the path (cssbuy)
+// Every agent Jadeship tracks (their extension's list, 36 agents). Formats drift,
+// so each agent is a small config entry — adding or fixing one is a one-liner.
+//
+// `verified` = the build format is confirmed from a real, working converter or
+// real product links. Unverified agents use their known URL path with a best-
+// guess query; the UI flags them so a guess never silently sends you somewhere
+// broken. Pasting a link FROM any agent still resolves (see parseAgentGeneric).
+//
+// Schemes:
+//   encoded_url — the full marketplace URL wrapped in a query param
+//   params      — ?<id>=123&<marketplace param>=<value>   (CNFans, ACBuy, …)
+//   path_code   — /product/<marketplace code>/<id>        (Hoobuy, OopBuy, …)
+//   cssbuy      — CSSBuy's own item-{id}.html / goodsDetail?type=&id= shapes
 
-type AgentBase = { key: string; name: string; hosts: string[] };
-type AgentDef =
+type AgentBase = {
+  key: string;
+  name: string;
+  hosts: string[];
+  verified: boolean;
+};
+export type AgentDef =
   | (AgentBase & { scheme: "encoded_url"; base: string; param: string })
   | (AgentBase & {
-      scheme: "shop_type";
+      scheme: "params";
       base: string;
-      mpParam: Record<Marketplace, string>;
+      idParam: string;
+      mpParam: string;
+      mpValues: Record<Marketplace, string>;
     })
-  | (AgentBase & { scheme: "path" });
+  | (AgentBase & {
+      scheme: "path_code";
+      base: string;
+      codes: Record<Marketplace, string>;
+      aliases?: Record<string, Marketplace>;
+      suffix?: string;
+    })
+  | (AgentBase & { scheme: "cssbuy" });
 
-// shop_type values shared by the CNFans-style family.
+// The CNFans-style family (shared SaaS): ?shop_type=<mp>&id=<id>
 const SHOP_TYPE: Record<Marketplace, string> = {
   taobao: "taobao",
-  tmall: "taobao", // these agents route tmall through taobao's id space
+  tmall: "taobao", // routed through taobao's id space
   weidian: "weidian",
   "1688": "ali_1688",
 };
+const shopType = (key: string, name: string, host: string, verified: boolean): AgentDef => ({
+  key,
+  name,
+  hosts: [host],
+  verified,
+  scheme: "params",
+  base: `https://${host === "lovegobuy.com" ? "www." : ""}${host}/product/`,
+  idParam: "id",
+  mpParam: "shop_type",
+  mpValues: SHOP_TYPE,
+});
+const wrapped = (
+  key: string,
+  name: string,
+  host: string,
+  base: string,
+  verified: boolean,
+  param = "url",
+): AgentDef => ({ key, name, hosts: [host], verified, scheme: "encoded_url", base, param });
+// Hoobuy's numeric marketplace codes (confirmed): 1 Taobao · 0 1688 · 2 Weidian
+const NUM_CODES: Record<Marketplace, string> = { taobao: "1", tmall: "1", "1688": "0", weidian: "2" };
+const NAMED: Record<Marketplace, string> = { taobao: "taobao", tmall: "tmall", "1688": "1688", weidian: "weidian" };
 
 export const AGENTS: AgentDef[] = [
-  // encoded_url family
-  { key: "superbuy", name: "Superbuy", hosts: ["superbuy.com"], scheme: "encoded_url", base: "https://www.superbuy.com/en/page/buy/", param: "url" },
-  { key: "wegobuy", name: "Wegobuy", hosts: ["wegobuy.com"], scheme: "encoded_url", base: "https://www.wegobuy.com/en/page/buy/", param: "url" },
-  { key: "allchinabuy", name: "AllChinaBuy", hosts: ["allchinabuy.com"], scheme: "encoded_url", base: "https://www.allchinabuy.com/en/page/buy/", param: "url" },
-  { key: "kakobuy", name: "Kakobuy", hosts: ["kakobuy.com"], scheme: "encoded_url", base: "https://www.kakobuy.com/item/details", param: "url" },
-  { key: "hagobuy", name: "Hagobuy", hosts: ["hagobuy.com"], scheme: "encoded_url", base: "https://www.hagobuy.com/item/details", param: "url" },
-  { key: "sugargoo", name: "Sugargoo", hosts: ["sugargoo.com"], scheme: "encoded_url", base: "https://www.sugargoo.com/#/home/productDetail", param: "productLink" },
-  { key: "pandabuy", name: "Pandabuy", hosts: ["pandabuy.com"], scheme: "encoded_url", base: "https://www.pandabuy.com/product", param: "url" },
-  // shop_type family
-  { key: "cnfans", name: "CNFans", hosts: ["cnfans.com"], scheme: "shop_type", base: "https://cnfans.com/product", mpParam: SHOP_TYPE },
-  { key: "mulebuy", name: "MuleBuy", hosts: ["mulebuy.com"], scheme: "shop_type", base: "https://mulebuy.com/product", mpParam: SHOP_TYPE },
-  { key: "orientdig", name: "OrientDig", hosts: ["orientdig.com"], scheme: "shop_type", base: "https://orientdig.com/product", mpParam: SHOP_TYPE },
-  { key: "lovegobuy", name: "LoveGoBuy", hosts: ["lovegobuy.com"], scheme: "shop_type", base: "https://www.lovegobuy.com/product", mpParam: SHOP_TYPE },
-  // path family
-  { key: "cssbuy", name: "CSSBUY", hosts: ["cssbuy.com"], scheme: "path" },
+  // ---- confirmed formats ----
+  wrapped("superbuy", "Superbuy", "superbuy.com", "https://www.superbuy.com/en/page/buy/", true),
+  wrapped("wegobuy", "Wegobuy", "wegobuy.com", "https://www.wegobuy.com/en/page/buy/", true),
+  wrapped("allchinabuy", "AllChinaBuy", "allchinabuy.com", "https://www.allchinabuy.com/en/page/buy/", true),
+  wrapped("kakobuy", "Kakobuy", "kakobuy.com", "https://www.kakobuy.com/item/details", true),
+  wrapped("sugargoo", "Sugargoo", "sugargoo.com", "https://www.sugargoo.com/#/home/productDetail", true, "productLink"),
+  shopType("cnfans", "CNFans", "cnfans.com", true),
+  shopType("mulebuy", "MuleBuy", "mulebuy.com", true),
+  shopType("orientdig", "OrientDig", "orientdig.com", true),
+  {
+    key: "acbuy", name: "ACBuy", hosts: ["acbuy.com"], verified: true,
+    scheme: "params", base: "https://www.acbuy.com/product/", idParam: "id", mpParam: "source",
+    mpValues: { taobao: "TB", tmall: "TB", weidian: "WD", "1688": "AL" },
+  },
+  {
+    key: "cnshopper", name: "CNShopper", hosts: ["cnshopper.com"], verified: true,
+    scheme: "params", base: "https://cnshopper.com/goods/detail", idParam: "keyword", mpParam: "platform",
+    mpValues: { taobao: "taobao", tmall: "taobao", weidian: "weidian", "1688": "1688" },
+  },
+  {
+    key: "hoobuy", name: "Hoobuy", hosts: ["hoobuy.com"], verified: true,
+    scheme: "path_code", base: "https://www.hoobuy.com/product", codes: NUM_CODES,
+  },
+  {
+    key: "oopbuy", name: "OopBuy", hosts: ["oopbuy.com"], verified: true,
+    scheme: "path_code", base: "https://www.oopbuy.com/product",
+    codes: { taobao: "1", tmall: "1", "1688": "0", weidian: "weidian" },
+    aliases: { "2": "weidian", taobao: "taobao", "1688": "1688" },
+  },
+  { key: "cssbuy", name: "CSSBuy", hosts: ["cssbuy.com"], verified: true, scheme: "cssbuy" },
+
+  // ---- unconfirmed formats (known URL path, best-guess query) ----
+  shopType("lovegobuy", "LoveGoBuy", "lovegobuy.com", false),
+  shopType("joyabuy", "JoyaBuy", "joyabuy.com", false),
+  shopType("joyagoo", "JoyaGoo", "joyagoo.com", false),
+  shopType("gtbuy", "GTBuy", "gtbuy.com", false),
+  shopType("litbuy", "LitBuy", "litbuy.com", false),
+  {
+    key: "usfans", name: "USFans", hosts: ["usfans.com"], verified: false,
+    scheme: "path_code", base: "https://www.usfans.com/product", codes: NUM_CODES,
+  },
+  {
+    key: "hipobuy", name: "HipoBuy", hosts: ["hipobuy.com"], verified: false,
+    scheme: "path_code", base: "https://hipobuy.com/product", codes: NUM_CODES,
+  },
+  {
+    key: "basetao", name: "Basetao", hosts: ["basetao.com"], verified: false,
+    scheme: "path_code", base: "https://www.basetao.com/best-taobao-agent-service/products/agent",
+    codes: NAMED, suffix: ".html",
+  },
+  {
+    key: "sifubuy", name: "SifuBuy", hosts: ["sifubuy.com"], verified: false,
+    scheme: "params", base: "https://www.sifubuy.com/detail", idParam: "id", mpParam: "type",
+    mpValues: NAMED,
+  },
+  wrapped("hagobuy", "Hagobuy", "hagobuy.com", "https://www.hagobuy.com/item/details", false),
+  wrapped("hegobuy", "Hegobuy", "hegobuy.com", "https://www.hegobuy.com/item/details", false),
+  wrapped("pandabuy", "Pandabuy", "pandabuy.com", "https://www.pandabuy.com/product", false),
+  wrapped("loongbuy", "LoongBuy", "loongbuy.com", "https://www.loongbuy.com/product-details", false),
+  wrapped("itaobuy", "iTaoBuy", "itaobuy.com", "https://www.itaobuy.com/product-detail", false),
+  wrapped("lolobuy", "LoloBuy", "lolobuy.com", "https://www.lolobuy.com/productDetail", false),
+  wrapped("fishgoo", "Fishgoo", "fishgoo.com", "https://www.fishgoo.com/#/product", false),
+  wrapped("panglobalbuy", "PanGlobalBuy", "panglobalbuy.com", "https://panglobalbuy.com/#/details", false),
+  wrapped("kameymall", "KameyMall", "kameymall.com", "https://www.kameymall.com/purchases/search/item", false),
+  wrapped("ezbuycn", "EZBuyCN", "ezbuycn.com", "https://ezbuycn.com/api/chaid.aspx", false, "key"),
+  wrapped("blikbuy", "BlikBuy", "blikbuy.com", "https://www.blikbuy.com/?go=item", false),
+  wrapped("ponybuy", "PonyBuy", "ponybuy.com", "https://www.ponybuy.com/", false),
+  wrapped("eastmallbuy", "EastMallBuy", "eastmallbuy.com", "https://eastmallbuy.com/index/item/index.html?tp=taobao&searchlang=en", false),
+  wrapped("hubbuycn", "HubbuyCN", "hubbuycn.com", "https://www.hubbuycn.com/index/item/index.html?tp=taobao&searchlang=en", false),
 ];
 
 export const AGENTS_BY_KEY: Record<string, AgentDef> = Object.fromEntries(
   AGENTS.map((a) => [a.key, a]),
+);
+
+/** Confirmed agents first (alphabetical), then unconfirmed (alphabetical). */
+export const AGENTS_SORTED: AgentDef[] = [...AGENTS].sort(
+  (a, b) =>
+    Number(b.verified) - Number(a.verified) || a.name.localeCompare(b.name),
 );
 
 function hostMatches(u: URL, hosts: string[]): boolean {
@@ -109,8 +220,8 @@ function hostMatches(u: URL, hosts: string[]): boolean {
   return hosts.some((x) => h === x || h.endsWith("." + x));
 }
 
-// cssbuy path encoding: item-{id}, item-micro-{id} (weidian), item-1688-{id},
-// item-tmall-{id}.
+// CSSBuy: item-{id}.html · item-micro-{id} (weidian) · item-1688-{id} ·
+// item-tmall-{id}; and the newer /shop/goodsDetail?type=micro&id=… pages.
 function cssbuyBuild(mp: Marketplace, id: string): string {
   const seg =
     mp === "weidian"
@@ -120,17 +231,26 @@ function cssbuyBuild(mp: Marketplace, id: string): string {
         : mp === "tmall"
           ? `item-tmall-${id}`
           : `item-${id}`;
-  return `https://cssbuy.com/${seg}.html`;
+  return `https://www.cssbuy.com/${seg}.html`;
 }
 function cssbuyParse(u: URL): ParsedLink | null {
   const m = u.pathname.match(/item-(micro-|1688-|tmall-)?(\d+)/);
-  if (!m) return null;
-  const kind = m[1];
-  const id = m[2];
-  if (kind === "micro-") return { marketplace: "weidian", id };
-  if (kind === "1688-") return { marketplace: "1688", id };
-  if (kind === "tmall-") return { marketplace: "tmall", id };
-  return { marketplace: "taobao", id };
+  if (m) {
+    const id = m[2];
+    if (m[1] === "micro-") return { marketplace: "weidian", id };
+    if (m[1] === "1688-") return { marketplace: "1688", id };
+    if (m[1] === "tmall-") return { marketplace: "tmall", id };
+    return { marketplace: "taobao", id };
+  }
+  const id = u.searchParams.get("id");
+  if (id && /goodsDetail/i.test(u.pathname)) {
+    const t = (u.searchParams.get("type") ?? "").toLowerCase();
+    if (t === "micro" || t === "weidian") return { marketplace: "weidian", id };
+    if (t === "1688" || t === "ali" || t === "alibaba") return { marketplace: "1688", id };
+    if (t === "tmall") return { marketplace: "tmall", id };
+    return { marketplace: "taobao", id };
+  }
+  return null;
 }
 
 // Read a wrapped inner URL out of an agent link's param, tolerating query- or
@@ -149,45 +269,108 @@ function readEncodedParam(href: string, param: string): string | null {
   return v;
 }
 
+// Query params from both the real query string and a hash route ("#/x?a=b").
+function allParams(u: URL): URLSearchParams {
+  const p = new URLSearchParams(u.search);
+  const q = u.hash.indexOf("?");
+  if (q >= 0) new URLSearchParams(u.hash.slice(q + 1)).forEach((v, k) => p.append(k, v));
+  return p;
+}
+
 /** Build a link to `agentKey` for a parsed product. Null if the agent is unknown. */
 export function buildAgentLink(agentKey: string, p: ParsedLink): string | null {
   const a = AGENTS_BY_KEY[agentKey];
   if (!a) return null;
   switch (a.scheme) {
-    case "encoded_url":
-      return `${a.base}?${a.param}=${encodeURIComponent(marketplaceUrl(p.marketplace, p.id))}`;
-    case "shop_type":
-      return `${a.base}?shop_type=${a.mpParam[p.marketplace]}&id=${p.id}`;
-    case "path":
+    case "encoded_url": {
+      const sep = a.base.includes("?") ? "&" : "?";
+      return `${a.base}${sep}${a.param}=${encodeURIComponent(marketplaceUrl(p.marketplace, p.id))}`;
+    }
+    case "params":
+      return `${a.base}?${a.idParam}=${p.id}&${a.mpParam}=${a.mpValues[p.marketplace]}`;
+    case "path_code":
+      return `${a.base}/${a.codes[p.marketplace]}/${p.id}${a.suffix ?? ""}`;
+    case "cssbuy":
       return cssbuyBuild(p.marketplace, p.id);
   }
 }
 
-function parseAgent(u: URL, href: string): ParsedLink | null {
+// Parse a link with the agent's own scheme.
+function parseWithScheme(a: AgentDef, u: URL): ParsedLink | null {
+  switch (a.scheme) {
+    case "encoded_url": {
+      const inner = readEncodedParam(u.href, a.param);
+      const iu = inner ? toURL(inner) : null;
+      return iu ? parseDirect(iu) : null;
+    }
+    case "params": {
+      const ps = allParams(u);
+      const id = ps.get(a.idParam);
+      const v = ps.get(a.mpParam);
+      if (!id || !v || !/^\d+$/.test(id)) return null;
+      const mp = (Object.keys(a.mpValues) as Marketplace[]).find(
+        (k) => a.mpValues[k].toLowerCase() === v.toLowerCase(),
+      );
+      return mp ? { marketplace: mp, id } : null;
+    }
+    case "path_code": {
+      const m = u.pathname.match(/\/product(?:s\/agent)?\/([^/]+)\/(\d+)/);
+      if (!m) return null;
+      const code = decodeURIComponent(m[1]).toLowerCase();
+      const mp =
+        (Object.keys(a.codes) as Marketplace[]).find(
+          (k) => a.codes[k].toLowerCase() === code && k !== "tmall",
+        ) ?? a.aliases?.[code];
+      return mp ? { marketplace: mp, id: m[2] } : null;
+    }
+    case "cssbuy":
+      return cssbuyParse(u);
+  }
+}
+
+// Words agents use for each marketplace in their params / paths.
+const MP_HINTS: [RegExp, Marketplace][] = [
+  [/^(?:weidian|wd|micro|vdian)$/i, "weidian"],
+  [/^(?:1688|ali_?1688|al|alibaba)$/i, "1688"],
+  [/^(?:tmall|tm)$/i, "tmall"],
+  [/^(?:taobao|tb)$/i, "taobao"],
+];
+const hintMp = (v: string): Marketplace | null =>
+  MP_HINTS.find(([re]) => re.test(v))?.[1] ?? null;
+
+/**
+ * Safety net for agent links whose exact scheme we don't know (or that drifted):
+ * any param that wraps a marketplace URL; a /<marketplace>/<id> path; or a
+ * numeric id param next to a marketplace word (shop_type, platform, source, …).
+ */
+export function parseAgentGeneric(u: URL): ParsedLink | null {
+  const ps = allParams(u);
+  for (const [, v] of ps) {
+    if (!/taobao|tmall|weidian|1688|youshop10/i.test(v)) continue;
+    const iu = toURL(v);
+    const d = iu && parseDirect(iu);
+    if (d) return d;
+  }
+  const pm = (u.pathname + u.hash).match(/\/(taobao|tmall|weidian|1688|ali_1688|micro)\/(\d{6,})/i);
+  if (pm) {
+    const mp = hintMp(pm[1]);
+    if (mp) return { marketplace: mp, id: pm[2] };
+  }
+  const idKey = ["id", "itemid", "item_id", "goodsid", "goods_id", "offerid", "productid", "keyword"];
+  let id: string | null = null;
+  let mp: Marketplace | null = null;
+  for (const [k, v] of ps) {
+    const kl = k.toLowerCase();
+    if (!id && idKey.includes(kl) && /^\d{6,}$/.test(v)) id = v;
+    if (!mp) mp = hintMp(v);
+  }
+  return id && mp ? { marketplace: mp, id } : null;
+}
+
+function parseAgent(u: URL): ParsedLink | null {
   for (const a of AGENTS) {
     if (!hostMatches(u, a.hosts)) continue;
-    if (a.scheme === "encoded_url") {
-      const inner = readEncodedParam(href, a.param);
-      if (inner) {
-        const iu = toURL(inner);
-        if (iu) {
-          const d = parseDirect(iu);
-          if (d) return d;
-        }
-      }
-    } else if (a.scheme === "shop_type") {
-      const st = u.searchParams.get("shop_type");
-      const id = u.searchParams.get("id");
-      if (st && id) {
-        const mp = (Object.keys(a.mpParam) as Marketplace[]).find(
-          (k) => a.mpParam[k] === st,
-        );
-        if (mp) return { marketplace: mp, id };
-      }
-    } else if (a.scheme === "path") {
-      const d = cssbuyParse(u);
-      if (d) return d;
-    }
+    return parseWithScheme(a, u) ?? parseAgentGeneric(u);
   }
   return null;
 }
@@ -207,7 +390,7 @@ export function detectAgent(raw: string): AgentDef | null {
 export function parseLink(raw: string): ParsedLink | null {
   const u = toURL(raw);
   if (!u) return null;
-  return parseDirect(u) ?? parseAgent(u, u.href);
+  return parseDirect(u) ?? parseAgent(u);
 }
 
 // --- Bulk extraction ---------------------------------------------------------
@@ -220,6 +403,7 @@ const BARE_HOSTS = [
   "koudai.com",
   "1688.com",
   "tb.cn",
+  "youshop10.com",
   ...AGENTS.flatMap((a) => a.hosts),
 ];
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

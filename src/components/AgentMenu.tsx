@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AGENTS } from "@/lib/links";
+import { AGENTS, AGENTS_SORTED } from "@/lib/links";
 import { onOpenAgentPicker, useFavAgent } from "@/lib/favAgent";
 import { AgentIcon } from "@/components/AgentIcon";
 
-const SORTED = [...AGENTS].sort((a, b) => a.name.localeCompare(b.name));
 
 // Header pill: pick the agent every product link converts to. Same setting as
 // the Link converter page, so changing it here changes it there too.
@@ -93,15 +92,26 @@ export function AgentMenu() {
             </span>
             Direct link (no agent)
           </MenuItem>
-          {SORTED.map((a) => (
-            <MenuItem
-              key={a.key}
-              active={a.key === fav}
-              onClick={() => pick(a.key)}
-            >
-              <AgentIcon host={a.hosts[0]} name={a.name} size="sm" />
-              {a.name}
-            </MenuItem>
+          {AGENTS_SORTED.map((a, i) => (
+            <div key={a.key}>
+              {!a.verified && AGENTS_SORTED[i - 1]?.verified && (
+                <div className="mt-1 border-t border-line/70 px-2 pb-1 pt-2 text-[11px] uppercase tracking-[0.2em] text-muted">
+                  Unconfirmed formats
+                </div>
+              )}
+              <MenuItem active={a.key === fav} onClick={() => pick(a.key)}>
+                <AgentIcon host={a.hosts[0]} name={a.name} size="sm" />
+                <span className={a.verified ? "" : "text-muted"}>{a.name}</span>
+                {!a.verified && (
+                  <span
+                    title="Link format not confirmed yet"
+                    className="text-[10px] text-muted/70"
+                  >
+                    ?
+                  </span>
+                )}
+              </MenuItem>
+            </div>
           ))}
         </div>
       )}
