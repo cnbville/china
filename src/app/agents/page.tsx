@@ -361,7 +361,7 @@ export default function AgentsPage() {
   return (
     <>
       <Header />
-      <main className="mx-auto max-w-5xl px-4 pb-16 pt-8">
+      <main className="mx-auto max-w-[1600px] px-4 pb-16 pt-8">
         <div className="mb-1 flex items-center gap-2">
           <span className="h-3 w-1.5 rounded-pill bg-accent shadow-glow" />
           <span className="text-meta uppercase tracking-[0.2em] text-muted">
@@ -432,7 +432,7 @@ export default function AgentsPage() {
         </form>
 
         <div className="mt-6 overflow-x-auto rounded-card border border-line bg-card/70 shadow-lift">
-          <table className="w-full min-w-[1400px] text-body">
+          <table className="w-full min-w-[1000px] text-body">
             <thead className="border-b border-line text-meta text-muted">
               <tr>
                 {th("rank", "#")}
@@ -441,6 +441,16 @@ export default function AgentsPage() {
                 {th("eur", "→ EUR", "€ for ¥1000 · upcharge")}
                 {th("proc", "Processing fee", "% · all-in price")}
                 {th("ship", "Domestic shipping", "¥ in China")}
+                {th("fee", "Cheapest payment", "fee %")}
+                <th className="px-2 py-2 text-left font-normal">
+                  Market rate
+                  <span className="block text-[11px]">live</span>
+                </th>
+                {th(
+                  "base",
+                  "vs baseline",
+                  baseline ? `vs ${baseline.name || "baseline"}` : "pick a ☆",
+                )}
                 <th className="px-2 py-2 text-left font-normal">
                   ¥ amount
                   <label className="mt-0.5 flex items-center gap-1 text-[11px]">
@@ -465,16 +475,6 @@ export default function AgentsPage() {
                     Your order{sort === "order" && " ↓"}
                   </button>
                 </th>
-                {th("fee", "Cheapest payment", "fee %")}
-                <th className="px-2 py-2 text-left font-normal">
-                  Market rate
-                  <span className="block text-[11px]">live</span>
-                </th>
-                {th(
-                  "base",
-                  "vs baseline",
-                  baseline ? `vs ${baseline.name || "baseline"}` : "pick a ☆",
-                )}
                 <th />
               </tr>
             </thead>
@@ -589,25 +589,6 @@ export default function AgentsPage() {
                         />
                       </div>
                     </td>
-                    <td className="px-2 py-1.5 text-meta text-muted tnum">
-                      {num(amount) === null ? "—" : `¥${amount}`}
-                    </td>
-                    <td className="px-2 py-1.5 text-meta tnum">
-                      {oUsd === null && oEur === null ? (
-                        <span className="text-muted">—</span>
-                      ) : (
-                        <>
-                          <div>
-                            {[
-                              oUsd !== null && `$${oUsd.toFixed(2)}`,
-                              oEur !== null && `€${oEur.toFixed(2)}`,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
-                          </div>
-                        </>
-                      )}
-                    </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
                         <Cell
@@ -639,6 +620,25 @@ export default function AgentsPage() {
                           <Diff label="$" d={dUsd} />
                           <br />
                           <Diff label="€" d={dEur} />
+                        </>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-meta text-muted tnum">
+                      {num(amount) === null ? "—" : `¥${amount}`}
+                    </td>
+                    <td className="px-2 py-1.5 text-meta tnum">
+                      {oUsd === null && oEur === null ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        <>
+                          <div>
+                            {[
+                              oUsd !== null && `$${oUsd.toFixed(2)}`,
+                              oEur !== null && `€${oEur.toFixed(2)}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
                         </>
                       )}
                     </td>
