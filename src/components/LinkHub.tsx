@@ -12,6 +12,7 @@ import {
   extractLinkEntries,
   marketplaceUrl,
   parseLink,
+  twinMarketplace,
   type Marketplace,
   type ParsedLink,
 } from "@/lib/links";
@@ -24,14 +25,17 @@ import { AgentIcon } from "@/components/AgentIcon";
 // The Link hub: the front door for any product link. Paste one link and it's
 // converted for your agent, checked against everything you already have, and
 // one click from your catalog / Later / Junk. Paste a wall of text and every
-// link in it is pulled out and handled in bulk. All conversion is local.
+// link in it is pulled out and handled in bulk. It works both ways: a raw
+// marketplace link converts to your agent, and an agent link (CSSBuy, CNFans …)
+// converts back to the raw Taobao / Tmall / Weidian / 1688 link. All local.
 
 const HISTORY_KEY = "link-history:v1";
 const HISTORY_MAX = 12;
 
 type Agent = (typeof AGENTS)[number];
 type HistoryEntry = { marketplace: Marketplace; id: string; at: number; label?: string };
-type Product = { raw: string; parsed: ParsedLink; key: string; label: string };
+// `source` = the agent the pasted link came from (null for a raw marketplace link).
+type Product = { raw: string; parsed: ParsedLink; key: string; label: string; source: string | null };
 
 const MP: Record<Marketplace, { label: string; hue: number }> = {
   taobao: { label: "Taobao", hue: 24 },
@@ -100,6 +104,8 @@ export function LinkHub() {
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
+  // Bulk output: agent links or the raw originals (null = pick automatically).
+  const [bulkMode, setBulkMode] = useState<"agent" | "original" | null>(null);
   // Labels you've edited by hand, per product (win over the auto-detected ones).
   const [labelEdits, setLabelEdits] = useState<Record<string, string>>({});
 
@@ -270,7 +276,7 @@ export function LinkHub() {
         if (!seen.label && label) seen.label = label;
         continue;
       }
-      const x = { raw, parsed, key, label };
+      const x = { raw, parsed, key, label, source: detectAgent(raw)?.name ?? null };
       byKey.set(key, x);
       products.push(x);
     }
@@ -279,6 +285,12 @@ export function LinkHub() {
 
   const single = analysis.kind === "single" ? analysis : null;
   const singleLink = single?.parsed ? outLink(single.parsed) : null;
+  // Reverse: an agent link in → the raw marketplace link is the main answer.
+  const singleOriginal = single?.parsed
+    ? marketplaceUrl(single.parsed.marketplace, single.parsed.id)
+    : null;
+  const singleReverse = !!single?.source || !favAgent;
+  const singlePrimary = singleReverse ? singleOriginal : singleLink;
   const singleKey = single?.parsed ? keyOf(single.parsed) : null;
   const singleLabel = singleKey ? (labelEdits[singleKey] ?? single?.label ?? "") : "";
   const labelOf = (x: Product) => labelEdits[x.key] ?? x.label;
@@ -301,24 +313,35 @@ export function LinkHub() {
       setShowQR(false);
       return;
     }
-    if (
-      e.key === "Enter" &&
-      !e.shiftKey &&
-      single?.parsed &&
-      singleLink &&
-      favAgent
-    ) {
+    if (e.key === "Enter" && !e.shiftKey && single?.parsed && singlePrimary) {
       e.preventDefault();
-      copyText("hero", singleLink, `Copied ${favAgent.name} link`, single.parsed, singleLabel);
+      copyText(
+        "hero",
+        singlePrimary,
+        singleReverse || !favAgent
+          ? `Copied original ${MP[single.parsed.marketplace].label} link`
+          : `Copied ${favAgent.name} link`,
+        single.parsed,
+        singleLabel,
+      );
     }
   }
 
-  // Bulk helpers
+  // Bulk helpers. Originals by default when every link came from an agent.
+  const bulkOriginal =
+    analysis.kind === "bulk" &&
+    (!favAgent ||
+      (bulkMode ??
+        (analysis.products.length > 0 && analysis.products.every((x) => x.source)
+          ? "original"
+          : "agent")) === "original");
+  const bulkOut = (x: Product) =>
+    bulkOriginal ? marketplaceUrl(x.parsed.marketplace, x.parsed.id) : outLink(x.parsed);
   async function bulkCopy(products: Product[]) {
     await copyText(
       "bulk-copy",
-      products.map((x) => outLink(x.parsed)).join("\n"),
-      `Copied ${products.length} links${favAgent ? ` for ${favAgent.name}` : ""}`,
+      products.map(bulkOut).join("\n"),
+      `Copied ${products.length} ${bulkOriginal ? "original links" : `links${favAgent ? ` for ${favAgent.name}` : ""}`}`,
     );
   }
   // "label — link" lines: for sharing a haul list or pasting into notes.
@@ -326,18 +349,19 @@ export function LinkHub() {
     await copyText(
       "bulk-list",
       products
-        .map((x) => (labelOf(x) ? `${labelOf(x)} — ${outLink(x.parsed)}` : outLink(x.parsed)))
+        .map((x) => (labelOf(x) ? `${labelOf(x)} — ${bulkOut(x)}` : bulkOut(x)))
         .join("\n"),
       `Copied ${products.length} as a labelled list`,
     );
   }
   function bulkCsv(products: Product[]) {
-    const head = ["label", "original", "marketplace", "id", "direct_url", "agent", "agent_url", "status"];
+    const head = ["label", "pasted", "from_agent", "marketplace", "id", "original_url", "agent", "agent_url", "status"];
     const rows = products.map((x) => {
       const hit = index.get(x.key);
       return [
         labelOf(x),
         x.raw,
+        x.source ?? "",
         x.parsed.marketplace,
         x.parsed.id,
         marketplaceUrl(x.parsed.marketplace, x.parsed.id),
@@ -382,14 +406,14 @@ export function LinkHub() {
 
   // --- Summary line under the bar -----------------------------------------
   let summary: React.ReactNode = (
-    <span className="text-muted/70">Taobao · Weidian · 1688 · Tmall · any agent</span>
+    <span className="text-muted/70">Taobao · Weidian · 1688 · Tmall · any agent — both ways</span>
   );
   if (single?.parsed) {
     summary = (
       <span className="flex min-w-0 items-center gap-2">
         <MarketBadge mp={single.parsed.marketplace} />
         <span className="tnum truncate text-ink">#{single.parsed.id}</span>
-        {single.source && <span className="shrink-0 text-muted">from {single.source.name}</span>}
+        {single.source && <span className="shrink-0 text-muted">↩ from {single.source.name}</span>}
       </span>
     );
   } else if (single) {
@@ -436,8 +460,8 @@ export function LinkHub() {
             Paste anything.
           </h1>
           <p className="mt-2 text-body text-muted">
-            Convert it, check it against your catalog, keep it — one link or a
-            hundred.
+            Raw link to your agent, or any agent link back to the raw one. Check
+            it against your catalog, keep it — one link or a hundred.
           </p>
         </div>
       </div>
@@ -498,7 +522,7 @@ export function LinkHub() {
           <div className="min-w-0">{summary}</div>
           <div className="hidden shrink-0 items-center gap-3 text-[11px] text-muted sm:flex">
             <span className="flex items-center gap-1"><Kbd>⌘V</Kbd> anywhere</span>
-            {favAgent && <span className="flex items-center gap-1"><Kbd>↵</Kbd> copy</span>}
+            {single?.parsed && <span className="flex items-center gap-1"><Kbd>↵</Kbd> copy</span>}
             <span className="flex items-center gap-1"><Kbd>esc</Kbd> clear</span>
           </div>
         </div>
@@ -523,6 +547,7 @@ export function LinkHub() {
         <SingleResult
           p={single.parsed}
           agent={favAgent}
+          source={single.source}
           link={singleLink}
           hit={index.get(keyOf(single.parsed))}
           copied={copied}
@@ -551,10 +576,12 @@ export function LinkHub() {
           busy={busy}
           labelOf={labelOf}
           onLabel={setLabel}
+          original={bulkOriginal}
+          onMode={(m) => setBulkMode(m)}
           onCopyOne={(x) =>
             copyText(
               `row:${x.key}`,
-              outLink(x.parsed),
+              bulkOut(x),
               `Copied ${labelOf(x) || `#${x.parsed.id}`}`,
               x.parsed,
               labelOf(x),
@@ -760,6 +787,7 @@ function ActionButton({
 function SingleResult({
   p,
   agent,
+  source,
   link,
   hit,
   copied,
@@ -776,6 +804,7 @@ function SingleResult({
 }: {
   p: ParsedLink;
   agent: Agent | null;
+  source: Agent | null;
   link: string | null;
   hit: LinkHit | undefined;
   copied: string | null;
@@ -792,36 +821,47 @@ function SingleResult({
 }) {
   const direct = marketplaceUrl(p.marketplace, p.id);
   const k = keyOf(p);
-  const others = AGENTS_SORTED.filter((a) => a.key !== agent?.key);
+  const others = AGENTS_SORTED.filter((a) => a.key !== agent?.key && a.key !== source?.key);
+  const mpName = MP[p.marketplace].label;
+  // Reverse: pasted an agent link (or no agent chosen) → the raw link leads.
+  const reverse = !!source || !agent;
+  const hero = reverse ? direct : link;
+  const twin = twinMarketplace(p.marketplace);
 
   return (
     <div className="animate-rise">
       <div className="glass mt-4 overflow-hidden">
-        {/* Your agent */}
         <div className="p-5">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] uppercase tracking-[0.2em] text-muted">
-              {agent ? "Your agent" : "Direct link"}
+            <span className="flex min-w-0 items-center gap-2 text-[11px] uppercase tracking-[0.2em] text-muted">
+              <span className="whitespace-nowrap">{reverse ? "Original link" : "Your agent"}</span>
+              {source && (
+                <span className="hidden truncate rounded-pill border border-line/80 bg-surface2/60 px-2 py-0.5 normal-case tracking-normal text-ink/80 sm:inline">
+                  ↩ back from {source.name}
+                </span>
+              )}
             </span>
-            <StatusPill hit={hit} />
+            <span className="shrink-0 whitespace-nowrap">
+              <StatusPill hit={hit} />
+            </span>
           </div>
 
           <div className="mt-3 flex items-start gap-3.5">
-            {agent ? (
-              <AgentIcon host={agent.hosts[0]} name={agent.name} size="lg" />
-            ) : (
+            {reverse ? (
               <span className="grid h-12 w-12 shrink-0 place-items-center rounded-[12px] border border-line bg-surface2/70">
                 <MarketBadgeDot mp={p.marketplace} />
               </span>
+            ) : (
+              agent && <AgentIcon host={agent.hosts[0]} name={agent.name} size="lg" />
             )}
             <div className="min-w-0 flex-1">
               <div className="text-lg font-medium leading-tight text-ink">
-                {agent ? agent.name : MP[p.marketplace].label}
+                {reverse ? `${mpName} · #${p.id}` : agent?.name}
               </div>
               <div className="mt-1 line-clamp-2 break-all font-mono text-[11.5px] leading-relaxed text-muted">
-                {link}
+                {hero}
               </div>
-              {agent && !agent.verified && (
+              {!reverse && agent && !agent.verified && (
                 <p className="mt-2 text-[11px] text-amber-300/90">
                   {agent.name}&rsquo;s link format isn&rsquo;t confirmed yet — if this opens the wrong
                   page, paste me a real {agent.name} link and I&rsquo;ll fix it.
@@ -831,23 +871,23 @@ function SingleResult({
           </div>
 
           <div className="mt-5 flex flex-wrap items-center gap-2">
-            {link && (
+            {hero && (
               <button
-                onClick={() => onCopy("hero", link, agent ? `Copied ${agent.name} link` : "Copied direct link")}
+                onClick={() =>
+                  onCopy("hero", hero, reverse ? `Copied original ${mpName} link` : `Copied ${agent?.name} link`)
+                }
                 className="btn-accent inline-flex items-center gap-2 px-4 py-2 text-body"
               >
-                {copied === "hero" ? "Copied ✓" : "Copy link"}
-                {agent && (
-                  <kbd className="rounded-[5px] bg-white/20 px-1.5 py-px font-mono text-[10px] text-white">↵</kbd>
-                )}
+                {copied === "hero" ? "Copied ✓" : reverse ? `Copy ${mpName} link` : "Copy link"}
+                <kbd className="rounded-[5px] bg-white/20 px-1.5 py-px font-mono text-[10px] text-white">↵</kbd>
               </button>
             )}
-            {link && (
-              <a href={link} target="_blank" rel="noreferrer" className="btn-ghost inline-flex items-center gap-1.5 !py-2">
+            {hero && (
+              <a href={hero} target="_blank" rel="noreferrer" className="btn-ghost inline-flex items-center gap-1.5 !py-2">
                 Open ↗
               </a>
             )}
-            {link && (
+            {hero && (
               <button onClick={onToggleQR} className={"btn-ghost inline-flex items-center gap-1.5 !py-2 " + (showQR ? "!border-accent/60" : "")}>
                 <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2M14 18h2v2M18 18h2v2" />
@@ -855,14 +895,63 @@ function SingleResult({
                 QR
               </button>
             )}
-            {!agent && (
-              <button onClick={onPickAgent} className="ml-auto text-meta text-accentSoft hover:underline">
-                Choose your agent →
+            {reverse && twin && (
+              <button
+                onClick={() => onCopy("twin", marketplaceUrl(twin, p.id), `Copied ${MP[twin].label} link`)}
+                className="ml-auto text-meta text-muted hover:text-ink"
+                title="Taobao and Tmall share item numbers, and most agents don't say which one it was — both links open the same product."
+              >
+                {copied === "twin" ? "Copied ✓" : `As ${MP[twin].label} link`}
               </button>
             )}
           </div>
 
-          {showQR && link && <QrPanel text={link} />}
+          {showQR && hero && <QrPanel text={hero} />}
+        </div>
+
+        {/* The other direction: your agent's link, or the clean original */}
+        <div className="flex items-center gap-3 border-t border-line/60 px-5 py-3">
+          {reverse ? (
+            agent && link ? (
+              <>
+                <AgentIcon host={agent.hosts[0]} name={agent.name} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-meta text-ink">
+                    Your agent · {agent.name}
+                    {!agent.verified && <span className="ml-1.5 text-[11px] text-amber-300/90">format unconfirmed</span>}
+                  </div>
+                  <div className="truncate font-mono text-[10.5px] text-muted">{link}</div>
+                </div>
+                <button
+                  onClick={() => onCopy("second", link, `Copied ${agent.name} link`)}
+                  className="shrink-0 rounded-pill border border-line px-3 py-1 text-[11px] text-ink transition-colors hover:border-accent/50 hover:text-accentSoft"
+                >
+                  {copied === "second" ? "Copied ✓" : "Copy"}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-meta text-muted">Want it for your agent too?</span>
+                <button onClick={onPickAgent} className="text-meta text-accentSoft hover:underline">
+                  Choose your agent →
+                </button>
+              </>
+            )
+          ) : (
+            <>
+              <MarketBadgeDot mp={p.marketplace} />
+              <div className="min-w-0 flex-1">
+                <div className="text-meta text-ink">Original {mpName} link</div>
+                <div className="truncate font-mono text-[10.5px] text-muted">{direct}</div>
+              </div>
+              <button
+                onClick={() => onCopy("second", direct, `Copied original ${mpName} link`)}
+                className="shrink-0 rounded-pill border border-line px-3 py-1 text-[11px] text-ink transition-colors hover:border-accent/50 hover:text-accentSoft"
+              >
+                {copied === "second" ? "Copied ✓" : "Copy"}
+              </button>
+            </>
+          )}
         </div>
 
         {/* Keep it */}
@@ -897,12 +986,6 @@ function SingleResult({
           >
             {hit?.where === "junk" ? "✓ In Junk" : "Junk it"}
           </ActionButton>
-          <button
-            onClick={() => onCopy("direct", direct, `Copied direct ${MP[p.marketplace].label} link`)}
-            className="ml-auto text-meta text-muted hover:text-ink"
-          >
-            {copied === "direct" ? "Copied ✓" : `Direct ${MP[p.marketplace].label} link`}
-          </button>
         </div>
         </div>
       </div>
@@ -969,6 +1052,8 @@ function BulkResult({
   busy,
   labelOf,
   onLabel,
+  original,
+  onMode,
   onCopyOne,
   onCopyAll,
   onCopyList,
@@ -984,6 +1069,8 @@ function BulkResult({
   busy: string | null;
   labelOf: (x: Product) => string;
   onLabel: (key: string, v: string) => void;
+  original: boolean;
+  onMode: (m: "agent" | "original") => void;
   onCopyOne: (x: Product) => void;
   onCopyAll: () => void;
   onCopyList: () => void;
@@ -1006,9 +1093,31 @@ function BulkResult({
           <Stat n={labelled} label="labelled" />
           {unknown.length > 0 && <Stat n={unknown.length} label="unrecognised" dim />}
         </div>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <span className="text-[11px] uppercase tracking-[0.18em] text-muted">Output</span>
+          <div className="inline-flex rounded-pill border border-line/80 bg-surface2/50 p-0.5 text-meta">
+            {agent && (
+              <button
+                onClick={() => onMode("agent")}
+                className={"rounded-pill px-3 py-1 transition-colors " + (!original ? "bg-card text-ink shadow-sm" : "text-muted hover:text-ink")}
+              >
+                {agent.name} links
+              </button>
+            )}
+            <button
+              onClick={() => onMode("original")}
+              className={"rounded-pill px-3 py-1 transition-colors " + (original || !agent ? "bg-card text-ink shadow-sm" : "text-muted hover:text-ink")}
+              title="The raw Taobao / Tmall / Weidian / 1688 link — converted back from whatever agent it came from"
+            >
+              Originals
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button onClick={onCopyAll} disabled={!products.length} className="btn-accent inline-flex items-center gap-2 px-4 py-2 text-body disabled:opacity-50">
-            {copied === "bulk-copy" ? "Copied ✓" : `Copy all ${products.length}${agent ? ` · ${agent.name}` : " · direct"}`}
+            {copied === "bulk-copy"
+              ? "Copied ✓"
+              : `Copy all ${products.length} · ${original || !agent ? "originals" : agent.name}`}
           </button>
           <button onClick={onSaveNew} disabled={!fresh || busy === "bulk-later"} className="btn-ghost !py-2 disabled:opacity-50">
             Save {fresh} new to Later
@@ -1048,7 +1157,10 @@ function BulkResult({
                     aria-label={`Label for #${x.parsed.id}`}
                     className="-mx-1 w-full rounded-[6px] bg-transparent px-1 py-0.5 text-body text-ink outline-none transition-colors placeholder:text-muted/45 hover:bg-surface2/40 focus:bg-surface2/70"
                   />
-                  <div className="truncate font-mono text-[10.5px] text-muted">#{x.parsed.id}</div>
+                  <div className="truncate font-mono text-[10.5px] text-muted">
+                    #{x.parsed.id}
+                    {x.source && <span className="font-sans"> · ↩ from {x.source}</span>}
+                  </div>
                 </div>
                 <span className="shrink-0">
                   <StatusPill hit={index.get(x.key)} />

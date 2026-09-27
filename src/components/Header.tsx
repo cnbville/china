@@ -38,7 +38,7 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="ml-auto flex items-center gap-0.5 sm:gap-1">
+        <nav className="ml-auto flex items-center gap-0 sm:gap-1">
           <IconLink href="/search" label="Search" active={pathname === "/search"}>
             <path d="M11 4a7 7 0 1 0 4.2 12.6L20 21m-1.5-10A7 7 0 1 1 11 4Z" />
           </IconLink>

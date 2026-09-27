@@ -35,33 +35,56 @@ function toURL(raw: string): URL | null {
   }
 }
 
-/** Pull marketplace + id out of a DIRECT marketplace link. */
+/** Pull marketplace + id out of a DIRECT marketplace link — desktop, mobile,
+ *  app-share and international variants, with any tracking junk around it. */
 export function parseDirect(u: URL): ParsedLink | null {
   const host = u.hostname.toLowerCase().replace(/^www\./, "");
+  const q = (...names: string[]) => {
+    for (const n of names) {
+      const v = u.searchParams.get(n);
+      if (v && /^\d+$/.test(v)) return v;
+    }
+    return null;
+  };
   if (/(^|\.)taobao\.com$/.test(host)) {
-    const id = u.searchParams.get("id");
+    // item.taobao.com / h5.m.taobao.com / m.intl.taobao.com … ?id=
+    const id = q("id", "itemId", "item_id");
     if (id) return { marketplace: "taobao", id };
-    // world.taobao.com/item/123.htm (and similar path-style item pages)
-    const m = u.pathname.match(/\/item\/(\d{6,})/);
+    // world.taobao.com/item/123.htm · a.m.taobao.com/i123.htm
+    const m = u.pathname.match(/\/item\/(\d{6,})/) || u.pathname.match(/\/i(\d{6,})\.htm/);
     if (m) return { marketplace: "taobao", id: m[1] };
   }
-  if (/(^|\.)tmall\.com$/.test(host)) {
-    const id = u.searchParams.get("id");
+  if (/(^|\.)tmall\.(com|hk)$/.test(host)) {
+    // detail.tmall.com / detail.m.tmall.com / detail.tmall.hk … ?id=
+    const id = q("id", "itemId", "item_id");
     if (id) return { marketplace: "tmall", id };
+    const m = u.pathname.match(/\/item\/(\d{6,})/);
+    if (m) return { marketplace: "tmall", id: m[1] };
   }
   if (
     /(^|\.)weidian\.com$/.test(host) ||
     /(^|\.)koudai\.com$/.test(host) ||
     /(^|\.)youshop10\.com$/.test(host)
   ) {
-    const id = u.searchParams.get("itemID") || u.searchParams.get("itemId");
+    // weidian.com/item.html?itemID= · shop123.v.weidian.com · k.youshop10.com
+    const id = q("itemID", "itemId", "itemid", "item_id");
     if (id) return { marketplace: "weidian", id };
+    const m = u.pathname.match(/\/item\/(\d{6,})/);
+    if (m) return { marketplace: "weidian", id: m[1] };
   }
   if (/(^|\.)1688\.com$/.test(host)) {
     const m = u.pathname.match(/\/offer\/(\d+)/);
     if (m) return { marketplace: "1688", id: m[1] };
+    // detail.m.1688.com/page/index.html?offerId=
+    const id = q("offerId", "offerid");
+    if (id) return { marketplace: "1688", id };
   }
   return null;
+}
+
+/** Taobao and Tmall share one item-id space, so either link opens the item. */
+export function twinMarketplace(mp: Marketplace): Marketplace | null {
+  return mp === "taobao" ? "tmall" : mp === "tmall" ? "taobao" : null;
 }
 
 // --- Agent definitions -------------------------------------------------------
@@ -399,6 +422,7 @@ export function parseLink(raw: string): ParsedLink | null {
 const BARE_HOSTS = [
   "taobao.com",
   "tmall.com",
+  "tmall.hk",
   "weidian.com",
   "koudai.com",
   "1688.com",
