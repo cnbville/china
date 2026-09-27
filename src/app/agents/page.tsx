@@ -432,7 +432,7 @@ export default function AgentsPage() {
         </form>
 
         <div className="mt-6 overflow-x-auto rounded-card border border-line bg-card/70 shadow-lift">
-          <table className="w-full min-w-[1240px] text-body">
+          <table className="w-full min-w-[1400px] text-body">
             <thead className="border-b border-line text-meta text-muted">
               <tr>
                 {th("rank", "#")}
@@ -442,15 +442,7 @@ export default function AgentsPage() {
                 {th("proc", "Processing fee", "% · all-in price")}
                 {th("ship", "Domestic shipping", "¥ in China")}
                 <th className="px-2 py-2 text-left font-normal">
-                  <button
-                    onClick={() => setSort("order")}
-                    className={
-                      "text-left hover:text-ink " +
-                      (sort === "order" ? "text-ink" : "")
-                    }
-                  >
-                    Your order{sort === "order" && " ↓"}
-                  </button>
+                  ¥ amount
                   <label className="mt-0.5 flex items-center gap-1 text-[11px]">
                     ¥
                     <input
@@ -461,6 +453,20 @@ export default function AgentsPage() {
                       className="w-20 rounded-[6px] border border-line bg-surface2 px-1.5 py-0.5 text-ink outline-none tnum focus:border-accent"
                     />
                   </label>
+                </th>
+                <th className="px-2 py-2 text-left font-normal">
+                  <button
+                    onClick={() => setSort("order")}
+                    className={
+                      "text-left hover:text-ink " +
+                      (sort === "order" ? "text-ink" : "")
+                    }
+                  >
+                    Your order{sort === "order" && " ↓"}
+                  </button>
+                </th>
+                <th className="px-2 py-2 text-left font-normal">
+                  Order + shipping
                 </th>
                 {th("fee", "Cheapest payment", "fee %")}
                 <th className="px-2 py-2 text-left font-normal">
@@ -478,7 +484,7 @@ export default function AgentsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={13} className="px-3 py-8 text-center text-muted">
                     No agents yet — add one above.
                   </td>
                 </tr>
@@ -588,6 +594,9 @@ export default function AgentsPage() {
                         />
                       </div>
                     </td>
+                    <td className="px-2 py-1.5 text-meta text-muted tnum">
+                      {num(amount) === null ? "—" : `¥${amount}`}
+                    </td>
                     <td className="px-2 py-1.5 text-meta tnum">
                       {oUsd === null && oEur === null ? (
                         <span className="text-muted">—</span>
@@ -601,21 +610,22 @@ export default function AgentsPage() {
                               .filter(Boolean)
                               .join(" · ")}
                           </div>
-                          {(sUsd !== null || sEur !== null) && (
-                            <div
-                              className="text-[11px] text-muted"
-                              title="Including this agent's domestic shipping"
-                            >
-                              +ship:{" "}
-                              {[
-                                sUsd !== null && `$${sUsd.toFixed(2)}`,
-                                sEur !== null && `€${sEur.toFixed(2)}`,
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </div>
-                          )}
                         </>
+                      )}
+                    </td>
+                    <td
+                      className="px-2 py-1.5 text-meta tnum"
+                      title="Including this agent's domestic shipping"
+                    >
+                      {sUsd === null && sEur === null ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        [
+                          sUsd !== null && `$${sUsd.toFixed(2)}`,
+                          sEur !== null && `€${sEur.toFixed(2)}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
                       )}
                     </td>
                     <td className="px-2 py-1.5">
