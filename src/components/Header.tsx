@@ -16,7 +16,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-30 border-b border-line/80 bg-paper/70 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4">
+      <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-2 px-3 sm:gap-3 sm:px-4">
         {/* Brand lockup */}
         <Link href="/" className="group flex items-center gap-2.5">
           <span className="relative block h-8 w-8 overflow-hidden rounded-[8px] shadow-glow transition-transform group-hover:scale-105">
@@ -27,7 +27,7 @@ export function Header() {
               className="h-full w-full object-cover"
             />
           </span>
-          <span className="flex flex-col leading-none">
+          <span className="hidden flex-col leading-none sm:flex">
             <span className="font-serif text-xl tracking-tightish">
               Personal Catalog
             </span>
@@ -37,7 +37,7 @@ export function Header() {
           </span>
         </Link>
 
-        <nav className="ml-auto flex items-center gap-1">
+        <nav className="ml-auto flex items-center gap-0.5 sm:gap-1">
           <IconLink href="/search" label="Search" active={pathname === "/search"}>
             <path d="M11 4a7 7 0 1 0 4.2 12.6L20 21m-1.5-10A7 7 0 1 1 11 4Z" />
           </IconLink>
@@ -89,7 +89,7 @@ export function Header() {
 
           <Link
             href="/items/new"
-            className="btn-accent flex items-center gap-1.5 px-3 py-2 text-meta"
+            className="btn-accent flex items-center gap-1.5 px-2.5 py-2 text-meta sm:px-3"
           >
             <svg
               viewBox="0 0 24 24"
@@ -108,7 +108,7 @@ export function Header() {
             type="button"
             onClick={onSignOut}
             title="Sign out"
-            className="rounded-card p-2 text-muted transition-colors hover:bg-surface2 hover:text-ink"
+            className="rounded-card p-1.5 text-muted transition-colors hover:bg-surface2 hover:text-ink sm:p-2"
           >
             <span className="sr-only">Sign out</span>
             <svg
@@ -148,7 +148,7 @@ function IconLink({
       href={href}
       title={label}
       className={
-        "rounded-card p-2 transition-colors hover:bg-surface2 " +
+        "rounded-card p-1.5 transition-colors hover:bg-surface2 sm:p-2 " +
         (active ? "text-accentSoft" : "text-muted hover:text-ink")
       }
     >

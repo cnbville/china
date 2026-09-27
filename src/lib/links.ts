@@ -209,3 +209,48 @@ export function parseLink(raw: string): ParsedLink | null {
   if (!u) return null;
   return parseDirect(u) ?? parseAgent(u, u.href);
 }
+
+// --- Bulk extraction ---------------------------------------------------------
+
+// Hosts we recognise even when a link is pasted without "https://".
+const BARE_HOSTS = [
+  "taobao.com",
+  "tmall.com",
+  "weidian.com",
+  "koudai.com",
+  "1688.com",
+  "tb.cn",
+  ...AGENTS.flatMap((a) => a.hosts),
+];
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const URL_RE = /https?:\/\/[^\s<>"'`)\]}]+/gi;
+const BARE_RE = new RegExp(
+  "(?:^|[\\s(\\[<\"'])((?:[\\w-]+\\.)*(?:" +
+    BARE_HOSTS.map(escapeRe).join("|") +
+    ")\\/[^\\s<>\"'`)\\]}]*)",
+  "gi",
+);
+
+/**
+ * Pull every link out of a blob of text — a Reddit post, a spreadsheet column,
+ * a chat dump. Catches full URLs and bare marketplace/agent links without a
+ * scheme, trims trailing punctuation, keeps first-seen order, no duplicates.
+ */
+export function extractLinks(text: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const add = (raw: string) => {
+    const v = raw.replace(/[.,;:!?]+$/, "");
+    if (v && !seen.has(v)) {
+      seen.add(v);
+      out.push(v);
+    }
+  };
+  const withScheme = text.match(URL_RE) ?? [];
+  withScheme.forEach(add);
+  // Only look for bare links in the text that's left once full URLs are gone,
+  // so "https://x.com/…" isn't also caught as bare "x.com/…".
+  const rest = text.replace(URL_RE, " ");
+  for (const m of rest.matchAll(BARE_RE)) add(m[1]);
+  return out;
+}

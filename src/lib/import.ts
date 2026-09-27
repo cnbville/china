@@ -37,6 +37,11 @@ export function readImportFromHash(): ImportPayload | null {
   return null;
 }
 
+/** The "#import=…" hash the add-item page reads, for in-app hand-offs. */
+export function buildImportHash(p: ImportPayload): string {
+  return "#import=" + encodeURIComponent(JSON.stringify(p));
+}
+
 /** How many images (capped) the payload wants re-hosted. */
 export function importImageUrls(p: ImportPayload): string[] {
   return (p.images ?? [])

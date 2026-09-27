@@ -4,6 +4,7 @@ import {
   AGENTS,
   buildAgentLink,
   detectAgent,
+  extractLinks,
   parseLink,
   type Marketplace,
   type ParsedLink,
@@ -109,3 +110,28 @@ test("linkKey: tmall folds into taobao id space", () => {
 // Keep the Marketplace type referenced so unused-import lint stays quiet.
 const _mp: Marketplace = "taobao";
 void _mp;
+
+// --- Bulk extraction ---
+
+test("extractLinks: pulls full + bare links out of messy text, dedupes, trims", () => {
+  const blob = `W2C hoodie: https://weidian.com/item.html?itemID=7212345678, also
+  this one (https://cnfans.com/product?shop_type=taobao&id=678901234567).
+  bare: detail.1688.com/offer/654321.html and again https://weidian.com/item.html?itemID=7212345678!
+  random https://example.com/x`;
+  assert.deepEqual(extractLinks(blob), [
+    "https://weidian.com/item.html?itemID=7212345678",
+    "https://cnfans.com/product?shop_type=taobao&id=678901234567",
+    "https://example.com/x",
+    "detail.1688.com/offer/654321.html",
+  ]);
+});
+
+test("extractLinks: every extracted product link parses", () => {
+  const blob =
+    "a https://item.taobao.com/item.htm?id=1 b weidian.com/item.html?itemID=2 c";
+  const parsed = extractLinks(blob).map((l) => parseLink(l));
+  assert.deepEqual(parsed, [
+    { marketplace: "taobao", id: "1" },
+    { marketplace: "weidian", id: "2" },
+  ]);
+});
