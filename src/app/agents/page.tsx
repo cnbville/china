@@ -31,7 +31,7 @@ const CNY_AMOUNT = 1000;
 const STORE_KEY = "agents:v2";
 const OLD_KEY = "agents:v1"; // stored ¥ per $1 / €1
 const BASE_KEY = "agents:baseline";
-const AMOUNT_KEY = "agents:amount"; // ¥ amount for the "Your order" column
+const AMOUNT_KEY = "agents:amount"; // ¥ amount for the "Cost projection" column
 
 function load(): Agent[] {
   try {
@@ -224,7 +224,7 @@ export default function AgentsPage() {
       const dUsd = rel(aUsd, bUsd);
       const dEur = rel(aEur, bEur);
       const dBest = minOf(dUsd, dEur);
-      // Price for the ¥ amount in the "Your order" column (all-in), and the
+      // Price for the ¥ amount in the "Cost projection" column (all-in), and the
       // same with the agent's domestic shipping added to the ¥ amount.
       const amt = num(amount);
       const ship = num(a.ship) ?? 0;
@@ -472,7 +472,7 @@ export default function AgentsPage() {
                       (sort === "order" ? "text-ink" : "")
                     }
                   >
-                    Your order{sort === "order" && " ↓"}
+                    Cost projection{sort === "order" && " ↓"}
                   </button>
                 </th>
                 <th />
@@ -699,9 +699,9 @@ export default function AgentsPage() {
           = rate + processing fee, and is what the ranking uses. Tap ☆ to make
           an agent the baseline — every other agent then shows how much cheaper
           (green, −) or pricier (red, +) it is all-in. Click a column header to
-          sort; click any cell to edit. Your order = what the ¥ amount in that
-          column header costs with each agent (all-in), and underneath the same
-          with their domestic shipping added.
+          sort; click any cell to edit. Cost projection = what the ¥ amount in
+          that column header costs with each agent (all-in), and underneath the
+          same with their domestic shipping added.
         </p>
 
         <p className="mt-10 text-meta">
