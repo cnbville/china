@@ -22,10 +22,41 @@ const MP: Record<Marketplace, { label: string; hue: number }> = {
   "1688": { label: "1688", hue: 36 },
 };
 
-function hueOf(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  return h;
+// Real brand favicon on a clean neutral chip, with a quiet monogram fallback —
+// far more premium than tinted gradient tiles.
+function AgentIcon({
+  host,
+  name,
+  copied,
+}: {
+  host: string;
+  name: string;
+  copied?: boolean;
+}) {
+  const [ok, setOk] = useState(true);
+  return (
+    <span
+      className={
+        "relative grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-[9px] border border-white/10 bg-white/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] " +
+        (copied ? "animate-pop" : "")
+      }
+    >
+      {ok ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
+          alt=""
+          className="h-5 w-5 object-contain"
+          onError={() => setOk(false)}
+          loading="lazy"
+        />
+      ) : (
+        <span className="font-sans text-sm font-semibold text-paper">
+          {name[0]}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export function LinkConverter() {
@@ -225,40 +256,24 @@ export function LinkConverter() {
           const link = parsed ? buildAgentLink(a.key, parsed) : null;
           const isFav = fav === a.key;
           const isCopied = copied === a.key;
-          const hue = hueOf(a.name);
           return (
             <div
               key={a.key}
               className={
-                "glass hairline card-lift group relative flex items-center gap-3 overflow-hidden p-3 " +
-                (isFav ? "!border-accent/60" : "") +
-                (parsed ? "" : " opacity-70")
+                "hairline card-lift group relative flex items-center gap-3 overflow-hidden rounded-card border bg-card/40 px-3 py-2.5 " +
+                (isFav ? "border-accent/50" : "border-line/70 hover:border-line") +
+                (parsed ? "" : " opacity-80")
               }
               data-on={isFav ? "true" : undefined}
-              style={{ animation: `rise .45s cubic-bezier(.22,1,.36,1) both`, animationDelay: `${Math.min(i, 8) * 24}ms` }}
+              style={{ animation: `rise .4s cubic-bezier(.22,1,.36,1) both`, animationDelay: `${Math.min(i, 8) * 22}ms` }}
             >
               {isFav && (
                 <span
                   aria-hidden
-                  className="pointer-events-none absolute inset-0 opacity-100"
-                  style={{
-                    background:
-                      "radial-gradient(120% 120% at 0% 0%, rgba(255,46,67,0.10), transparent 55%)",
-                  }}
+                  className="pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-gradient-to-b from-accent to-accentSoft"
                 />
               )}
-              <span
-                className={
-                  "relative grid h-10 w-10 shrink-0 place-items-center rounded-[12px] font-serif text-base text-white ring-1 ring-white/10 " +
-                  (isCopied ? "animate-pop" : "")
-                }
-                style={{
-                  background: `linear-gradient(145deg, hsl(${hue} 58% 36%), hsl(${(hue + 42) % 360} 48% 22%))`,
-                }}
-                aria-hidden
-              >
-                {a.name[0]}
-              </span>
+              <AgentIcon host={a.hosts[0]} name={a.name} copied={isCopied} />
 
               <button
                 onClick={() => link && copy(a.key, link)}
