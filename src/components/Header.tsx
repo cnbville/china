@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { AgentMenu } from "@/components/AgentMenu";
 
 export function Header() {
   const router = useRouter();
@@ -93,6 +94,8 @@ export function Header() {
           </IconLink>
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
+
+          <AgentMenu />
 
           <Link
             href="/items/new"

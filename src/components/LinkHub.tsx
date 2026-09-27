@@ -17,13 +17,14 @@ import {
 import { linkKey } from "@/lib/linkKey";
 import { loadLinkIndex, type LinkHit } from "@/lib/linkIndex";
 import { buildImportHash } from "@/lib/import";
+import { useFavAgent } from "@/lib/favAgent";
+import { AgentIcon } from "@/components/AgentIcon";
 
 // The Link hub: the front door for any product link. Paste one link and it's
 // converted for your agent, checked against everything you already have, and
 // one click from your catalog / Later / Junk. Paste a wall of text and every
 // link in it is pulled out and handled in bulk. All conversion is local.
 
-const FAV_KEY = "link-fav-agent";
 const HISTORY_KEY = "link-history:v1";
 const HISTORY_MAX = 12;
 
@@ -89,7 +90,8 @@ const NOT_PRODUCTS =
 export function LinkHub() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
-  const [fav, setFav] = useState<string | null>(null);
+  // Your agent — shared with the header picker and item pages.
+  const [fav, setFav] = useFavAgent();
   const [picking, setPicking] = useState(false);
   const [index, setIndex] = useState<Map<string, LinkHit>>(new Map());
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -103,8 +105,6 @@ export function LinkHub() {
   // Restore favourite agent + recent history.
   useEffect(() => {
     try {
-      const f = localStorage.getItem(FAV_KEY);
-      if (f && AGENTS.some((a) => a.key === f)) setFav(f);
       const h = JSON.parse(localStorage.getItem(HISTORY_KEY) ?? "[]");
       if (Array.isArray(h)) setHistory(h.slice(0, HISTORY_MAX));
     } catch {
@@ -162,12 +162,6 @@ export function LinkHub() {
   function chooseFav(key: string | null) {
     setFav(key);
     setPicking(false);
-    try {
-      if (key) localStorage.setItem(FAV_KEY, key);
-      else localStorage.removeItem(FAV_KEY);
-    } catch {
-      /* ignore */
-    }
   }
 
   function pushHistory(p: ParsedLink, tag = "") {
@@ -608,35 +602,6 @@ function MarketBadge({ mp }: { mp: Marketplace }) {
       }}
     >
       {label}
-    </span>
-  );
-}
-
-function AgentIcon({ host, name, size = "md" }: { host: string; name: string; size?: "sm" | "md" | "lg" }) {
-  const [ok, setOk] = useState(true);
-  const box = size === "lg" ? "h-12 w-12 rounded-[12px]" : size === "sm" ? "h-5 w-5 rounded-[5px]" : "h-8 w-8 rounded-[8px]";
-  const img = size === "lg" ? "h-7 w-7" : size === "sm" ? "h-3.5 w-3.5" : "h-[18px] w-[18px]";
-  return (
-    <span className={`grid shrink-0 place-items-center overflow-hidden border border-white/10 bg-white ${box}`}>
-      {ok ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`}
-          alt=""
-          className={`${img} object-contain`}
-          onError={() => setOk(false)}
-          loading="lazy"
-        />
-      ) : (
-        <span
-          className={
-            "font-semibold text-paper " +
-            (size === "lg" ? "text-xl" : size === "sm" ? "text-[10px]" : "text-sm")
-          }
-        >
-          {name[0]}
-        </span>
-      )}
     </span>
   );
 }
