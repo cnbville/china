@@ -81,6 +81,16 @@ const minOf = (...xs: (number | null)[]) => {
   return ns.length ? Math.min(...ns) : null;
 };
 
+// Keep only digits and one decimal point (a typed comma counts as the point),
+// so pasted values like "$148.90" or "3,5 %" become "148.90" / "3.5".
+function numOnly(v: string): string {
+  const cleaned = v.replace(/,/g, ".").replace(/[^0-9.]/g, "");
+  const dot = cleaned.indexOf(".");
+  return dot === -1
+    ? cleaned
+    : cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, "");
+}
+
 function pct(n: number | null): string {
   if (n === null) return "—";
   return (n > 0 ? "+" : "") + n.toFixed(2) + "%";
@@ -392,35 +402,45 @@ export default function AgentsPage() {
             inputMode="decimal"
             placeholder={`$ for ¥1000${mUsd ? ` (mkt ${mUsd.toFixed(2)})` : ""}`}
             value={draft.usd}
-            onChange={(e) => setDraft({ ...draft, usd: e.target.value })}
+            onChange={(e) =>
+              setDraft({ ...draft, usd: numOnly(e.target.value) })
+            }
           />
           <input
             className="input tnum"
             inputMode="decimal"
             placeholder={`€ for ¥1000${mEur ? ` (mkt ${mEur.toFixed(2)})` : ""}`}
             value={draft.eur}
-            onChange={(e) => setDraft({ ...draft, eur: e.target.value })}
+            onChange={(e) =>
+              setDraft({ ...draft, eur: numOnly(e.target.value) })
+            }
           />
           <input
             className="input tnum"
             inputMode="decimal"
             placeholder="Processing %"
             value={draft.proc}
-            onChange={(e) => setDraft({ ...draft, proc: e.target.value })}
+            onChange={(e) =>
+              setDraft({ ...draft, proc: numOnly(e.target.value) })
+            }
           />
           <input
             className="input tnum"
             inputMode="decimal"
             placeholder="Domestic ship ¥"
             value={draft.ship}
-            onChange={(e) => setDraft({ ...draft, ship: e.target.value })}
+            onChange={(e) =>
+              setDraft({ ...draft, ship: numOnly(e.target.value) })
+            }
           />
           <input
             className="input tnum"
             inputMode="decimal"
             placeholder="Cheapest pay %"
             value={draft.fee}
-            onChange={(e) => setDraft({ ...draft, fee: e.target.value })}
+            onChange={(e) =>
+              setDraft({ ...draft, fee: numOnly(e.target.value) })
+            }
           />
           <button
             type="submit"
@@ -458,7 +478,7 @@ export default function AgentsPage() {
                     <input
                       value={amount}
                       inputMode="decimal"
-                      onChange={(e) => setAmount(e.target.value)}
+                      onChange={(e) => setAmount(numOnly(e.target.value))}
                       title="Change the ¥ amount — every agent's price updates"
                       className="w-20 rounded-[6px] border border-line bg-surface2 px-1.5 py-0.5 text-ink outline-none tnum focus:border-accent"
                     />
@@ -746,7 +766,9 @@ function Cell({
     <input
       value={value}
       inputMode={numeric ? "decimal" : undefined}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) =>
+        onChange(numeric ? numOnly(e.target.value) : e.target.value)
+      }
       placeholder="—"
       className={
         "w-full min-w-0 rounded-[6px] border border-transparent bg-transparent px-1.5 py-1 outline-none hover:border-line focus:border-accent focus:bg-surface2 " +
