@@ -93,6 +93,91 @@ body {
   .btn-ghost {
     @apply rounded-card border border-line bg-card/60 px-3 py-1.5 text-meta text-ink transition-colors hover:border-ink/40 hover:bg-surface2;
   }
+
+  /* Frosted surface: translucent, blurred, hairline border with a top highlight. */
+  .glass {
+    @apply rounded-card border border-line/80 bg-card/55 backdrop-blur-xl;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.04),
+      0 1px 2px rgba(0, 0, 0, 0.4),
+      0 12px 34px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Smooth lift + faint accent ring on hover for interactive cards. */
+.card-lift {
+  transition:
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease;
+}
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 46, 67, 0.18);
+}
+
+/* A red hairline that fades in along the top edge on hover. */
+.hairline {
+  position: relative;
+}
+.hairline::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 92, 108, 0.7),
+    transparent
+  );
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.hairline:hover::before,
+.hairline[data-on="true"]::before {
+  opacity: 1;
+}
+
+/* Soft top-lit gradient on serif headings for a premium sheen. */
+.text-sheen {
+  background: linear-gradient(180deg, #ffffff 0%, #c7ccd6 92%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: pop 0.28s ease;
+}
+
+@keyframes rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-rise {
+  animation: rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Photos fill their frame edge to edge, 4:5 ratio, no internal padding. On the

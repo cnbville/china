@@ -9,7 +9,7 @@ export default function LinksPage() {
   return (
     <>
       <Header />
-      <main className="mx-auto max-w-xl px-4 py-8">
+      <main className="mx-auto max-w-2xl px-4 pb-16 pt-10">
         <LinkConverter />
         <p className="mt-10 text-meta">
           <Link href="/" className="text-muted underline hover:text-ink">
