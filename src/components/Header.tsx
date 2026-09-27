@@ -57,6 +57,14 @@ export function Header() {
             <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
           </IconLink>
           <IconLink
+            href="/markup"
+            label="Markup checker"
+            active={pathname === "/markup"}
+            className="hidden sm:block"
+          >
+            <path d="M4 20 20 4M7 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM17 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
+          </IconLink>
+          <IconLink
             href="/links"
             label="Link converter"
             active={pathname === "/links"}
@@ -146,11 +154,13 @@ function IconLink({
   href,
   label,
   active,
+  className = "",
   children,
 }: {
   href: string;
   label: string;
   active?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -159,7 +169,9 @@ function IconLink({
       title={label}
       className={
         "rounded-card p-1.5 transition-colors hover:bg-surface2 sm:p-2 " +
-        (active ? "text-accentSoft" : "text-muted hover:text-ink")
+        (active ? "text-accentSoft" : "text-muted hover:text-ink") +
+        " " +
+        className
       }
     >
       <span className="sr-only">{label}</span>
