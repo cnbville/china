@@ -111,12 +111,19 @@ export default function AddItemPage() {
       if (urls.length > 0) {
         setImporting({ done: 0, total: urls.length });
         (async () => {
-          const collected: File[] = [];
-          for (let i = 0; i < urls.length; i++) {
-            const file = await fetchImportImage(supabase, urls[i], i);
-            if (file) collected.push(file);
-            setImporting({ done: i + 1, total: urls.length });
-          }
+          // A few at a time (big galleries), kept in the page's photo order.
+          const results: (File | null)[] = new Array(urls.length).fill(null);
+          let next = 0;
+          let done = 0;
+          const worker = async () => {
+            while (next < urls.length) {
+              const i = next++;
+              results[i] = await fetchImportImage(supabase, urls[i], i);
+              setImporting({ done: ++done, total: urls.length });
+            }
+          };
+          await Promise.all(Array.from({ length: Math.min(4, urls.length) }, worker));
+          const collected = results.filter((f): f is File => f !== null);
           setFiles(collected);
           const missed = urls.length - collected.length;
           setImporting(
