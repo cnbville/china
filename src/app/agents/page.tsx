@@ -1,28 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/Header";
 import { getRates, type FxData } from "@/lib/fx";
+import { createClient } from "@/lib/supabase/client";
+import { fetchAgents, num, syncAgents, toRow, type Agent } from "@/lib/agents";
 
-// Shipping-agent ranking. Kept entirely in this browser (localStorage) — no
-// Supabase — so it's a quick scratch table you can fill in and come back to.
+// Shipping-agent ranking. Saved to Supabase (shipping_agents), with a copy in
+// localStorage so the table still opens offline or before the first sync.
 //
 // Rates are entered as what the agent charges for ¥1000 in $ / €, WITHOUT the
 // processing fee, so the rate columns show the pure FX upcharge vs. market.
 // The processing fee % is its own column; ranking and the baseline comparison
 // use the all-in price (rate + processing fee). The cheapest-payment column is
 // kept for reference only.
-
-type Agent = {
-  id: string;
-  name: string;
-  usd: string; // $ the agent charges for ¥1000
-  eur: string; // € the agent charges for ¥1000
-  proc?: string; // processing fee, % (added on top of the rate)
-  ship?: string; // domestic shipping in China, ¥ (reference, not in ranking)
-  fee: string; // cheapest payment fee, % (reference only)
-};
 
 type SortKey =
   | "rank"
@@ -62,11 +54,6 @@ function load(): Agent[] {
   return [];
 }
 
-function num(s: string): number | null {
-  const n = parseFloat(s.replace(",", "."));
-  return Number.isFinite(n) ? n : null;
-}
-
 // Pure FX upcharge: % the agent's rate is above market (no processing fee).
 function upcharge(agentPrice: string, market: number | undefined) {
   const p = num(agentPrice);
@@ -104,6 +91,11 @@ export default function AgentsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<SortKey>("rank");
   const [baseId, setBaseId] = useState<string | null>(null);
+  // Cloud sync: null until the first Supabase load settles.
+  const [sync, setSync] = useState<
+    "loading" | "saving" | "saved" | { error: string }
+  >("loading");
+  const synced = useRef<Map<string, string> | null>(null);
   const [draft, setDraft] = useState<Omit<Agent, "id">>({
     name: "",
     usd: "",
@@ -114,15 +106,64 @@ export default function AgentsPage() {
   });
 
   useEffect(() => {
-    setAgents(load());
+    const local = load();
+    let localBase: string | null = null;
     try {
-      setBaseId(localStorage.getItem(BASE_KEY));
+      localBase = localStorage.getItem(BASE_KEY);
     } catch {
       /* ignore */
     }
+    setAgents(local);
+    setBaseId(localBase);
     setLoaded(true);
     getRates().then(setFx);
+
+    // Supabase is the source of truth. If it's empty but this browser has
+    // agents from before cloud sync, upload them (the debounced sync below
+    // does that once `synced` is an empty map).
+    const supabase = createClient();
+    fetchAgents(supabase)
+      .then((remote) => {
+        if (remote.agents.length > 0 || local.length === 0) {
+          setAgents(remote.agents);
+          setBaseId(remote.baseId);
+          synced.current = new Map(
+            remote.agents.map((a) => [
+              a.id,
+              JSON.stringify(toRow(a, remote.baseId)),
+            ]),
+          );
+          setSync("saved");
+        } else {
+          synced.current = new Map();
+          setSync("saving");
+        }
+      })
+      .catch((e: { message?: string }) =>
+        setSync({ error: e?.message ?? "Couldn't reach Supabase" }),
+      );
   }, []);
+
+  // Push edits to Supabase, debounced so typing doesn't fire a write per key.
+  useEffect(() => {
+    if (!synced.current) return;
+    const rows = agents.map((a) => toRow(a, baseId));
+    const t = setTimeout(async () => {
+      if (!synced.current) return;
+      setSync("saving");
+      try {
+        synced.current = await syncAgents(createClient(), rows, synced.current);
+        setSync("saved");
+      } catch (e) {
+        setSync({
+          error: (e as { message?: string })?.message ?? "Save failed",
+        });
+      }
+    }, 700);
+    return () => clearTimeout(t);
+    // `sync` is included so the first upload runs once loading settles.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agents, baseId, sync === "loading"]);
 
   // Save on every change (after the initial load, so we never wipe the store).
   useEffect(() => {
@@ -284,8 +325,8 @@ export default function AgentsPage() {
           Enter what each agent charges for ¥1000 in $ and € (before processing
           fees), their processing fee %, domestic shipping cost (¥), and their
           cheapest payment fee for reference. Ranked by all-in cost (rate +
-          processing fee) vs. the market rate — lower is better. Saved in this
-          browser only.
+          processing fee) vs. the market rate — lower is better. Saved to
+          Supabase, so it&apos;s on all your devices.
         </p>
 
         <form
@@ -529,6 +570,18 @@ export default function AgentsPage() {
             {fx
               ? `Market: ${fx.source} · ${fx.stale ? "offline" : "as of " + fx.date}`
               : "Loading rates…"}
+            {" · "}
+            {sync === "loading" ? (
+              "Loading from Supabase…"
+            ) : sync === "saving" ? (
+              "Saving…"
+            ) : sync === "saved" ? (
+              <span className="text-emerald-400">Saved to Supabase</span>
+            ) : (
+              <span className="text-accentSoft" title={sync.error}>
+                Not synced — only saved in this browser ({sync.error})
+              </span>
+            )}
           </span>
           <span className="flex gap-4">
             <button
