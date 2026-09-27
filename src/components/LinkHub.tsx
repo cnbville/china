@@ -8,7 +8,7 @@ import {
   AGENTS,
   buildAgentLink,
   detectAgent,
-  extractLinks,
+  extractLinkEntries,
   marketplaceUrl,
   parseLink,
   type Marketplace,
@@ -28,8 +28,8 @@ const HISTORY_KEY = "link-history:v1";
 const HISTORY_MAX = 12;
 
 type Agent = (typeof AGENTS)[number];
-type HistoryEntry = { marketplace: Marketplace; id: string; at: number };
-type Product = { raw: string; parsed: ParsedLink; key: string };
+type HistoryEntry = { marketplace: Marketplace; id: string; at: number; label?: string };
+type Product = { raw: string; parsed: ParsedLink; key: string; label: string };
 
 const MP: Record<Marketplace, { label: string; hue: number }> = {
   taobao: { label: "Taobao", hue: 24 },
@@ -54,6 +54,38 @@ function csvCell(v: string): string {
   return /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
 }
 
+// Copying a rendered Reddit post (or any web page) puts hyperlinked words in
+// the clipboard as plain text — the URLs only survive in its HTML copy. Rebuild
+// that into "[words](url)" so every link comes through, labelled by its words.
+function htmlToLinkText(html: string): string | null {
+  if (!html || !/<a[\s>]/i.test(html)) return null;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const anchors = Array.from(doc.querySelectorAll("a[href]"));
+  if (!anchors.some((a) => parseLink(a.getAttribute("href") ?? ""))) return null;
+  for (const a of anchors) {
+    const href = a.getAttribute("href") ?? "";
+    if (!/^https?:\/\//i.test(href)) continue;
+    const words = (a.textContent ?? "").replace(/[[\]]/g, " ").replace(/\s+/g, " ").trim();
+    const md = words && words !== href ? `[${words}](${href})` : href;
+    a.replaceWith(doc.createTextNode(` ${md} `));
+  }
+  doc.querySelectorAll("br").forEach((b) => b.replaceWith(doc.createTextNode("\n")));
+  doc
+    .querySelectorAll("p,div,li,h1,h2,h3,h4,h5,h6,tr,blockquote,pre")
+    .forEach((el) => el.append(doc.createTextNode("\n")));
+  return (doc.body.textContent ?? "")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+// Links that are obviously not products (the post itself, image hosts, socials)
+// are dropped quietly instead of cluttering "couldn't read these".
+const NOT_PRODUCTS =
+  /^https?:\/\/(?:[\w-]+\.)*(?:reddit\.com|redd\.it|imgur\.com|youtube\.com|youtu\.be|discord\.(?:com|gg)|twitter\.com|x\.com|instagram\.com|tiktok\.com|google\.com|pinterest\.com)(?:[\/?#]|$)/i;
+
 export function LinkHub() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
@@ -65,6 +97,8 @@ export function LinkHub() {
   const [copied, setCopied] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [showQR, setShowQR] = useState(false);
+  // Labels you've edited by hand, per product (win over the auto-detected ones).
+  const [labelEdits, setLabelEdits] = useState<Record<string, string>>({});
 
   // Restore favourite agent + recent history.
   useEffect(() => {
@@ -94,7 +128,10 @@ export function LinkHub() {
     };
     function onPaste(e: ClipboardEvent) {
       if (isField(e.target)) return;
-      const text = e.clipboardData?.getData("text") ?? "";
+      const text =
+        htmlToLinkText(e.clipboardData?.getData("text/html") ?? "") ??
+        e.clipboardData?.getData("text") ??
+        "";
       if (!text.trim()) return;
       e.preventDefault();
       setInput(text);
@@ -133,10 +170,10 @@ export function LinkHub() {
     }
   }
 
-  function pushHistory(p: ParsedLink) {
+  function pushHistory(p: ParsedLink, tag = "") {
     setHistory((h) => {
       const next = [
-        { marketplace: p.marketplace, id: p.id, at: Date.now() },
+        { marketplace: p.marketplace, id: p.id, at: Date.now(), ...(tag ? { label: tag } : {}) },
         ...h.filter((x) => !(x.marketplace === p.marketplace && x.id === p.id)),
       ].slice(0, HISTORY_MAX);
       try {
@@ -157,7 +194,7 @@ export function LinkHub() {
     }
   }
 
-  async function copyText(id: string, text: string, label: string, p?: ParsedLink) {
+  async function copyText(id: string, text: string, label: string, p?: ParsedLink, tag = "") {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -167,7 +204,7 @@ export function LinkHub() {
     setCopied(id);
     window.setTimeout(() => setCopied((c) => (c === id ? null : c)), 1400);
     flash(label);
-    if (p) pushHistory(p);
+    if (p) pushHistory(p, tag);
   }
 
   // Your agent's link for a product (or the direct link if no agent is set).
@@ -178,11 +215,14 @@ export function LinkHub() {
     );
   }
 
-  async function saveTo(table: "saved_links" | "junk_links", p: ParsedLink) {
+  // Later keeps the label as its label (title); Junk only has a note.
+  async function saveTo(table: "saved_links" | "junk_links", p: ParsedLink, tag = "") {
     const url = marketplaceUrl(p.marketplace, p.id);
     const k = keyOf(p);
     setBusy(`${table}:${k}`);
-    const { error } = await createClient().from(table).insert({ url });
+    const row: Record<string, string | null> =
+      table === "saved_links" ? { url, title: tag || null } : { url, note: tag || null };
+    const { error } = await createClient().from(table).insert(row);
     setBusy(null);
     if (error) {
       flash(error.message);
@@ -194,49 +234,71 @@ export function LinkHub() {
       return n;
     });
     flash(table === "saved_links" ? "Saved to Later" : "Tossed in Junk");
-    pushHistory(p);
+    pushHistory(p, tag);
   }
 
-  function addAsItem(p: ParsedLink) {
-    pushHistory(p);
+  function addAsItem(p: ParsedLink, tag = "") {
+    pushHistory(p, tag);
     const base = window.location.pathname.replace(/\/links\/?$/, "");
     const url = marketplaceUrl(p.marketplace, p.id);
-    window.location.assign(`${base}/items/new/${buildImportHash({ v: 1, url })}`);
+    const hash = buildImportHash({ v: 1, url, ...(tag ? { title: tag } : {}) });
+    window.location.assign(`${base}/items/new/${hash}`);
   }
 
   // --- What's in the bar? -------------------------------------------------
   const analysis = useMemo(() => {
     const text = input.trim();
     if (!text) return { kind: "empty" as const };
-    const links = extractLinks(text);
-    if (links.length <= 1) {
-      const raw = links[0] ?? text;
+    const entries = extractLinkEntries(text);
+    if (entries.length <= 1) {
+      const raw = entries[0]?.url ?? text;
       return {
         kind: "single" as const,
         raw,
         parsed: parseLink(raw),
         source: detectAgent(raw),
+        label: entries[0]?.label ?? "",
       };
     }
     const products: Product[] = [];
     const unknown: string[] = [];
-    const seen = new Set<string>();
-    for (const raw of links) {
+    const byKey = new Map<string, Product>();
+    for (const { url: raw, label } of entries) {
       const parsed = parseLink(raw);
       if (!parsed) {
-        unknown.push(raw);
+        if (!NOT_PRODUCTS.test(raw)) unknown.push(raw);
         continue;
       }
       const key = keyOf(parsed);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      products.push({ raw, parsed, key });
+      const seen = byKey.get(key);
+      if (seen) {
+        if (!seen.label && label) seen.label = label;
+        continue;
+      }
+      const x = { raw, parsed, key, label };
+      byKey.set(key, x);
+      products.push(x);
     }
     return { kind: "bulk" as const, products, unknown };
   }, [input]);
 
   const single = analysis.kind === "single" ? analysis : null;
   const singleLink = single?.parsed ? outLink(single.parsed) : null;
+  const singleKey = single?.parsed ? keyOf(single.parsed) : null;
+  const singleLabel = singleKey ? (labelEdits[singleKey] ?? single?.label ?? "") : "";
+  const labelOf = (x: Product) => labelEdits[x.key] ?? x.label;
+  const setLabel = (key: string, v: string) =>
+    setLabelEdits((m) => ({ ...m, [key]: v }));
+
+  // Pasting straight into the bar: rebuild HTML clipboards (see htmlToLinkText).
+  function onBarPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const rebuilt = htmlToLinkText(e.clipboardData.getData("text/html"));
+    if (!rebuilt) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    setInput(el.value.slice(0, el.selectionStart) + rebuilt + el.value.slice(el.selectionEnd));
+    setShowQR(false);
+  }
 
   function onBarKey(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Escape") {
@@ -252,7 +314,7 @@ export function LinkHub() {
       favAgent
     ) {
       e.preventDefault();
-      copyText("hero", singleLink, `Copied ${favAgent.name} link`, single.parsed);
+      copyText("hero", singleLink, `Copied ${favAgent.name} link`, single.parsed, singleLabel);
     }
   }
 
@@ -264,11 +326,22 @@ export function LinkHub() {
       `Copied ${products.length} links${favAgent ? ` for ${favAgent.name}` : ""}`,
     );
   }
+  // "label — link" lines: for sharing a haul list or pasting into notes.
+  async function bulkCopyList(products: Product[]) {
+    await copyText(
+      "bulk-list",
+      products
+        .map((x) => (labelOf(x) ? `${labelOf(x)} — ${outLink(x.parsed)}` : outLink(x.parsed)))
+        .join("\n"),
+      `Copied ${products.length} as a labelled list`,
+    );
+  }
   function bulkCsv(products: Product[]) {
-    const head = ["original", "marketplace", "id", "direct_url", "agent", "agent_url", "status"];
+    const head = ["label", "original", "marketplace", "id", "direct_url", "agent", "agent_url", "status"];
     const rows = products.map((x) => {
       const hit = index.get(x.key);
       return [
+        labelOf(x),
         x.raw,
         x.parsed.marketplace,
         x.parsed.id,
@@ -293,7 +366,12 @@ export function LinkHub() {
     setBusy("bulk-later");
     const { error } = await createClient()
       .from("saved_links")
-      .insert(fresh.map((x) => ({ url: marketplaceUrl(x.parsed.marketplace, x.parsed.id) })));
+      .insert(
+        fresh.map((x) => ({
+          url: marketplaceUrl(x.parsed.marketplace, x.parsed.id),
+          title: labelOf(x) || null,
+        })),
+      );
     setBusy(null);
     if (error) {
       flash(error.message);
@@ -398,6 +476,7 @@ export function LinkHub() {
               setShowQR(false);
             }}
             onKeyDown={onBarKey}
+            onPaste={onBarPaste}
             placeholder="Paste a link — or a whole list of them…"
             rows={barRows}
             autoFocus
@@ -435,7 +514,8 @@ export function LinkHub() {
         <EmptyState
           history={history}
           onPick={(e) => {
-            setInput(marketplaceUrl(e.marketplace, e.id));
+            const url = marketplaceUrl(e.marketplace, e.id);
+            setInput(e.label ? `${e.label} ${url}` : url);
             inputRef.current?.focus();
           }}
           onClear={clearHistory}
@@ -455,9 +535,13 @@ export function LinkHub() {
           showQR={showQR}
           onToggleQR={() => setShowQR((v) => !v)}
           onPickAgent={() => setPicking(true)}
-          onCopy={(id, text, label) => copyText(id, text, label, single.parsed ?? undefined)}
-          onSave={(t) => single.parsed && saveTo(t, single.parsed)}
-          onAdd={() => single.parsed && addAsItem(single.parsed)}
+          label={singleLabel}
+          onLabel={(v) => singleKey && setLabel(singleKey, v)}
+          onCopy={(id, text, label) =>
+            copyText(id, text, label, single.parsed ?? undefined, singleLabel)
+          }
+          onSave={(t) => single.parsed && saveTo(t, single.parsed, singleLabel)}
+          onAdd={() => single.parsed && addAsItem(single.parsed, singleLabel)}
           onMakeFav={(k) => chooseFav(k)}
         />
       )}
@@ -470,11 +554,19 @@ export function LinkHub() {
           index={index}
           copied={copied}
           busy={busy}
-          outLink={outLink}
+          labelOf={labelOf}
+          onLabel={setLabel}
           onCopyOne={(x) =>
-            copyText(`row:${x.key}`, outLink(x.parsed), `Copied #${x.parsed.id}`, x.parsed)
+            copyText(
+              `row:${x.key}`,
+              outLink(x.parsed),
+              `Copied ${labelOf(x) || `#${x.parsed.id}`}`,
+              x.parsed,
+              labelOf(x),
+            )
           }
           onCopyAll={() => bulkCopy(analysis.products)}
+          onCopyList={() => bulkCopyList(analysis.products)}
           onCsv={() => bulkCsv(analysis.products)}
           onSaveNew={() => bulkSaveNew(analysis.products)}
           onPickAgent={() => setPicking(true)}
@@ -693,6 +785,8 @@ function SingleResult({
   showQR,
   onToggleQR,
   onPickAgent,
+  label,
+  onLabel,
   onCopy,
   onSave,
   onAdd,
@@ -707,6 +801,8 @@ function SingleResult({
   showQR: boolean;
   onToggleQR: () => void;
   onPickAgent: () => void;
+  label: string;
+  onLabel: (v: string) => void;
   onCopy: (id: string, text: string, label: string) => void;
   onSave: (t: "saved_links" | "junk_links") => void;
   onAdd: () => void;
@@ -784,8 +880,18 @@ function SingleResult({
         </div>
 
         {/* Keep it */}
-        <div className="flex flex-wrap items-center gap-2 border-t border-line/60 bg-surface2/25 px-5 py-3">
-          <span className="mr-1 text-[11px] uppercase tracking-[0.18em] text-muted">Keep</span>
+        <div className="border-t border-line/60 bg-surface2/25 px-5 py-3">
+        <label className="mb-3 flex items-center gap-3">
+          <span className="w-10 shrink-0 text-[11px] uppercase tracking-[0.18em] text-muted">Label</span>
+          <input
+            value={label}
+            onChange={(e) => onLabel(e.target.value)}
+            placeholder="What is it? — saved with it to Later, or as the item's title"
+            className="min-w-0 flex-1 border-b border-line/70 bg-transparent py-1 text-body text-ink outline-none transition-colors placeholder:text-muted/50 focus:border-accent/60"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="mr-1 w-10 text-[11px] uppercase tracking-[0.18em] text-muted">Keep</span>
           {hit?.where === "item" ? (
             <ActionButton onClick={() => {}} disabled done>✓ Already in catalog</ActionButton>
           ) : (
@@ -811,6 +917,7 @@ function SingleResult({
           >
             {copied === "direct" ? "Copied ✓" : `Direct ${MP[p.marketplace].label} link`}
           </button>
+        </div>
         </div>
       </div>
 
@@ -870,9 +977,11 @@ function BulkResult({
   index,
   copied,
   busy,
-  outLink,
+  labelOf,
+  onLabel,
   onCopyOne,
   onCopyAll,
+  onCopyList,
   onCsv,
   onSaveNew,
   onPickAgent,
@@ -883,15 +992,18 @@ function BulkResult({
   index: Map<string, LinkHit>;
   copied: string | null;
   busy: string | null;
-  outLink: (p: ParsedLink) => string;
+  labelOf: (x: Product) => string;
+  onLabel: (key: string, v: string) => void;
   onCopyOne: (x: Product) => void;
   onCopyAll: () => void;
+  onCopyList: () => void;
   onCsv: () => void;
   onSaveNew: () => void;
   onPickAgent: () => void;
 }) {
   const owned = products.filter((x) => index.has(x.key)).length;
   const fresh = products.length - owned;
+  const labelled = products.filter((x) => labelOf(x)).length;
 
   return (
     <div className="animate-rise mt-4">
@@ -901,6 +1013,7 @@ function BulkResult({
           <Stat n={products.length} label="products" />
           <Stat n={fresh} label="new to you" />
           <Stat n={owned} label="already yours" />
+          <Stat n={labelled} label="labelled" />
           {unknown.length > 0 && <Stat n={unknown.length} label="unrecognised" dim />}
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -909,6 +1022,9 @@ function BulkResult({
           </button>
           <button onClick={onSaveNew} disabled={!fresh || busy === "bulk-later"} className="btn-ghost !py-2 disabled:opacity-50">
             Save {fresh} new to Later
+          </button>
+          <button onClick={onCopyList} disabled={!products.length} className="btn-ghost !py-2 disabled:opacity-50" title="Each line: label — link">
+            {copied === "bulk-list" ? "Copied ✓" : "Copy as list"}
           </button>
           <button onClick={onCsv} disabled={!products.length} className="btn-ghost !py-2 disabled:opacity-50">
             Export CSV
@@ -934,11 +1050,17 @@ function BulkResult({
               >
                 <span className="w-6 shrink-0 text-right text-[11px] tnum text-muted/70">{i + 1}</span>
                 <MarketBadge mp={x.parsed.marketplace} />
-                <span className="w-32 shrink-0 truncate font-mono text-[12px] text-ink">#{x.parsed.id}</span>
-                <span className="hidden min-w-0 flex-1 truncate font-mono text-[11px] text-muted md:block">
-                  {outLink(x.parsed)}
-                </span>
-                <span className="ml-auto shrink-0 md:ml-0">
+                <div className="min-w-0 flex-1">
+                  <input
+                    value={labelOf(x)}
+                    onChange={(e) => onLabel(x.key, e.target.value)}
+                    placeholder="Add a label…"
+                    aria-label={`Label for #${x.parsed.id}`}
+                    className="-mx-1 w-full rounded-[6px] bg-transparent px-1 py-0.5 text-body text-ink outline-none transition-colors placeholder:text-muted/45 hover:bg-surface2/40 focus:bg-surface2/70"
+                  />
+                  <div className="truncate font-mono text-[10.5px] text-muted">#{x.parsed.id}</div>
+                </div>
+                <span className="shrink-0">
                   <StatusPill hit={index.get(x.key)} />
                 </span>
                 <button
@@ -1020,8 +1142,9 @@ function EmptyState({
               className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-surface2/40"
             >
               <MarketBadge mp={e.marketplace} />
-              <span className="font-mono text-[12px] text-ink">#{e.id}</span>
-              <span className="ml-auto text-[11px] text-muted">{timeAgo(e.at)}</span>
+              <span className="min-w-0 truncate text-body text-ink">{e.label || <span className="font-mono text-[12px]">#{e.id}</span>}</span>
+              {e.label && <span className="shrink-0 font-mono text-[11px] text-muted">#{e.id}</span>}
+              <span className="ml-auto shrink-0 text-[11px] text-muted">{timeAgo(e.at)}</span>
             </button>
           ))}
         </div>

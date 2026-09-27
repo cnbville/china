@@ -231,26 +231,127 @@ const BARE_RE = new RegExp(
   "gi",
 );
 
+const MD_RE = /\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/gi;
+
+/** A link found in pasted text, with the human label written next to it. */
+export type LinkEntry = { url: string; label: string };
+
+type Hit = { url: string; start: number; end: number; md?: string };
+
+// Every link on one line with its position: markdown [label](url), full URLs,
+// and bare marketplace/agent links — each counted once, left to right.
+function findLinksInLine(line: string): Hit[] {
+  const hits: Hit[] = [];
+  const blank = (str: string, a: number, b: number) =>
+    str.slice(0, a) + " ".repeat(b - a) + str.slice(b);
+  let masked = line;
+  for (const m of line.matchAll(MD_RE)) {
+    const a = m.index ?? 0;
+    const b = a + m[0].length;
+    hits.push({ url: m[2], start: a, end: b, md: m[1] });
+    masked = blank(masked, a, b);
+  }
+  for (const m of masked.matchAll(URL_RE)) {
+    const a = m.index ?? 0;
+    hits.push({ url: m[0], start: a, end: a + m[0].length });
+  }
+  const noUrls = masked.replace(URL_RE, (x) => " ".repeat(x.length));
+  for (const m of noUrls.matchAll(BARE_RE)) {
+    const a = (m.index ?? 0) + (m[0].length - m[1].length);
+    hits.push({ url: m[1], start: a, end: a + m[1].length });
+  }
+  return hits.sort((x, y) => x.start - y.start);
+}
+
+const FILLER =
+  /^(?:w2c|wtc|link|links|here|this|this one|url|click|click here|lc|buy|cop|and|or|also)$/i;
+const SEP = "\\s:;,.\\-–—→»=>|~•·";
+
+/** Turn the text around a link into a clean, short label — or "" if it's noise. */
+export function cleanLabel(raw: string): string {
+  let t = raw
+    .replace(/\*\*|__|`/g, "")
+    .replace(/^[\s>#]+/, "")
+    .replace(/^\s*(?:[-*•·▪►➤→]+|\d+[.)])\s+/, "")
+    .replace(new RegExp(`^[${SEP})\\]]+`), "")
+    .replace(/^(?:w2c|wtc|where to cop)\b/i, "")
+    .replace(new RegExp(`^[${SEP})\\]]+`), "")
+    .replace(new RegExp(`[${SEP}(\\[]+$`), "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!t || FILLER.test(t) || /https?:\/\/|www\.|\.(?:com|cn)\//i.test(t)) return "";
+  if (t.length > 80) t = t.slice(0, 79).trimEnd() + "…";
+  return t;
+}
+
+// A line with no link that reads like a section title ("Jackets", "**Tees**",
+// "Shoes:") labels the bare links under it. Prose lines don't.
+function headingOf(line: string): string {
+  const t = line.trim();
+  const looks =
+    /^#{1,6}\s/.test(t) ||
+    /^(\*\*|__).+(\*\*|__):?$/.test(t) ||
+    /:$/.test(t) ||
+    (t.split(/\s+/).length <= 3 && !/[.!?]$/.test(t));
+  if (!looks) return "";
+  const h = cleanLabel(t);
+  return h.length <= 40 ? h : "";
+}
+
 /**
  * Pull every link out of a blob of text — a Reddit post, a spreadsheet column,
- * a chat dump. Catches full URLs and bare marketplace/agent links without a
- * scheme, trims trailing punctuation, keeps first-seen order, no duplicates.
+ * a chat dump — together with the label written next to it:
+ *   "hoodie https://…"            → label before the link
+ *   "https://… - hoodie"          → label after the link
+ *   "[Travis 1s](https://…)"      → markdown link text
+ *   "**Jackets**" then "- https://…" lines → the heading labels bare links
+ * Full URLs and bare marketplace/agent links (no "https://") are both caught,
+ * trailing punctuation is trimmed, order is kept, duplicates are merged (the
+ * first non-empty label wins).
  */
-export function extractLinks(text: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const add = (raw: string) => {
-    const v = raw.replace(/[.,;:!?]+$/, "");
-    if (v && !seen.has(v)) {
-      seen.add(v);
-      out.push(v);
+export function extractLinkEntries(text: string): LinkEntry[] {
+  const out: LinkEntry[] = [];
+  const at = new Map<string, number>();
+  const add = (rawUrl: string, label: string) => {
+    const url = rawUrl.replace(/[.,;:!?]+$/, "");
+    if (!url) return;
+    const i = at.get(url);
+    if (i != null) {
+      if (!out[i].label && label) out[i].label = label;
+      return;
     }
+    at.set(url, out.length);
+    out.push({ url, label });
   };
-  const withScheme = text.match(URL_RE) ?? [];
-  withScheme.forEach(add);
-  // Only look for bare links in the text that's left once full URLs are gone,
-  // so "https://x.com/…" isn't also caught as bare "x.com/…".
-  const rest = text.replace(URL_RE, " ");
-  for (const m of rest.matchAll(BARE_RE)) add(m[1]);
+
+  let heading = "";
+  for (const line of text.split(/\r?\n/)) {
+    const hits = findLinksInLine(line);
+    if (hits.length === 0) {
+      if (line.trim()) heading = headingOf(line);
+      continue;
+    }
+    // Is this line written "label → link" or "link → label"?
+    const firstBefore = cleanLabel(line.slice(0, hits[0].start));
+    const firstAfter = cleanLabel(
+      line.slice(hits[0].end, hits[1]?.start ?? line.length),
+    );
+    const labelAfter = !hits[0].md && !firstBefore && !!firstAfter;
+
+    hits.forEach((h, j) => {
+      let label = h.md ? cleanLabel(h.md) : "";
+      if (!label) {
+        label = labelAfter
+          ? cleanLabel(line.slice(h.end, hits[j + 1]?.start ?? line.length))
+          : cleanLabel(line.slice(j === 0 ? 0 : hits[j - 1].end, h.start));
+      }
+      add(h.url, label || heading);
+    });
+  }
   return out;
+}
+
+/** Just the links from a blob of text (see extractLinkEntries). */
+export function extractLinks(text: string): string[] {
+  return extractLinkEntries(text).map((e) => e.url);
 }
