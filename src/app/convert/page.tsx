@@ -11,6 +11,7 @@ import {
   type Currency,
   type FxData,
 } from "@/lib/fx";
+import { numOnly } from "@/lib/numOnly";
 
 export default function ConvertPage() {
   const [fx, setFx] = useState<FxData | null>(null);
@@ -78,7 +79,7 @@ export default function ConvertPage() {
                 value={amounts[c]}
                 onChange={(e) => {
                   setActive(c);
-                  setValue(e.target.value);
+                  setValue(numOnly(e.target.value));
                 }}
                 placeholder="0"
                 className="w-full bg-transparent text-right text-xl outline-none tnum"
