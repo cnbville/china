@@ -24,12 +24,14 @@ type SortKey =
   | "proc"
   | "ship"
   | "fee"
-  | "base";
+  | "base"
+  | "order";
 
 const CNY_AMOUNT = 1000;
 const STORE_KEY = "agents:v2";
 const OLD_KEY = "agents:v1"; // stored ¥ per $1 / €1
 const BASE_KEY = "agents:baseline";
+const AMOUNT_KEY = "agents:amount"; // ¥ amount for the "Your order" column
 
 function load(): Agent[] {
   try {
@@ -91,6 +93,7 @@ export default function AgentsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [sort, setSort] = useState<SortKey>("rank");
   const [baseId, setBaseId] = useState<string | null>(null);
+  const [amount, setAmount] = useState("1000");
   // Cloud sync: null until the first Supabase load settles.
   const [sync, setSync] = useState<
     "loading" | "saving" | "saved" | { error: string }
@@ -115,6 +118,12 @@ export default function AgentsPage() {
     }
     setAgents(local);
     setBaseId(localBase);
+    try {
+      const amt = localStorage.getItem(AMOUNT_KEY);
+      if (amt) setAmount(amt);
+    } catch {
+      /* ignore */
+    }
     setLoaded(true);
     getRates().then(setFx);
 
@@ -185,6 +194,15 @@ export default function AgentsPage() {
     }
   }, [baseId, loaded]);
 
+  useEffect(() => {
+    if (!loaded) return;
+    try {
+      localStorage.setItem(AMOUNT_KEY, amount);
+    } catch {
+      /* ignore */
+    }
+  }, [amount, loaded]);
+
   // Market price of ¥1000 in $ and € (fx rates are EUR = 1).
   const mUsd = fx ? (CNY_AMOUNT * fx.rates.USD) / fx.rates.CNY : undefined;
   const mEur = fx ? CNY_AMOUNT / fx.rates.CNY : undefined;
@@ -206,7 +224,35 @@ export default function AgentsPage() {
       const dUsd = rel(aUsd, bUsd);
       const dEur = rel(aEur, bEur);
       const dBest = minOf(dUsd, dEur);
-      return { a, cUsd, cEur, aUsd, aEur, tUsd, tEur, best, dUsd, dEur, dBest };
+      // Price for the ¥ amount in the "Your order" column (all-in), and the
+      // same with the agent's domestic shipping added to the ¥ amount.
+      const amt = num(amount);
+      const ship = num(a.ship) ?? 0;
+      const scale = (per1000: number | null, cny: number) =>
+        per1000 === null || amt === null ? null : (per1000 * cny) / CNY_AMOUNT;
+      const oUsd = scale(aUsd, amt ?? 0);
+      const oEur = scale(aEur, amt ?? 0);
+      const sUsd = ship ? scale(aUsd, (amt ?? 0) + ship) : null;
+      const sEur = ship ? scale(aEur, (amt ?? 0) + ship) : null;
+      const oSort = sUsd ?? oUsd ?? sEur ?? oEur;
+      return {
+        a,
+        cUsd,
+        cEur,
+        aUsd,
+        aEur,
+        tUsd,
+        tEur,
+        best,
+        dUsd,
+        dEur,
+        dBest,
+        oUsd,
+        oEur,
+        sUsd,
+        sEur,
+        oSort,
+      };
     });
     const nullLast = (x: number | null) => (x === null ? Infinity : x);
     const ranked = [...withCost].sort(
@@ -229,12 +275,14 @@ export default function AgentsPage() {
           return nullLast(num(x.a.fee)) - nullLast(num(y.a.fee));
         case "base":
           return nullLast(x.dBest) - nullLast(y.dBest);
+        case "order":
+          return nullLast(x.oSort) - nullLast(y.oSort);
         default:
           return rankOf.get(x.a.id)! - rankOf.get(y.a.id)!;
       }
     });
     return sorted.map((r) => ({ ...r, rank: rankOf.get(r.a.id)! }));
-  }, [agents, mUsd, mEur, sort, baseline]);
+  }, [agents, mUsd, mEur, sort, baseline, amount]);
 
   function add(e: React.FormEvent) {
     e.preventDefault();
@@ -384,7 +432,7 @@ export default function AgentsPage() {
         </form>
 
         <div className="mt-6 overflow-x-auto rounded-card border border-line bg-card/70 shadow-lift">
-          <table className="w-full min-w-[1100px] text-body">
+          <table className="w-full min-w-[1240px] text-body">
             <thead className="border-b border-line text-meta text-muted">
               <tr>
                 {th("rank", "#")}
@@ -393,6 +441,27 @@ export default function AgentsPage() {
                 {th("eur", "→ EUR", "€ for ¥1000 · upcharge")}
                 {th("proc", "Processing fee", "% · all-in price")}
                 {th("ship", "Domestic shipping", "¥ in China")}
+                <th className="px-2 py-2 text-left font-normal">
+                  <button
+                    onClick={() => setSort("order")}
+                    className={
+                      "text-left hover:text-ink " +
+                      (sort === "order" ? "text-ink" : "")
+                    }
+                  >
+                    Your order{sort === "order" && " ↓"}
+                  </button>
+                  <label className="mt-0.5 flex items-center gap-1 text-[11px]">
+                    ¥
+                    <input
+                      value={amount}
+                      inputMode="decimal"
+                      onChange={(e) => setAmount(e.target.value)}
+                      title="Change the ¥ amount — every agent's price updates"
+                      className="w-20 rounded-[6px] border border-line bg-surface2 px-1.5 py-0.5 text-ink outline-none tnum focus:border-accent"
+                    />
+                  </label>
+                </th>
                 {th("fee", "Cheapest payment", "fee %")}
                 <th className="px-2 py-2 text-left font-normal">
                   Market rate
@@ -409,7 +478,7 @@ export default function AgentsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={10} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={11} className="px-3 py-8 text-center text-muted">
                     No agents yet — add one above.
                   </td>
                 </tr>
@@ -426,6 +495,10 @@ export default function AgentsPage() {
                   rank,
                   dUsd,
                   dEur,
+                  oUsd,
+                  oEur,
+                  sUsd,
+                  sEur,
                 }) => (
                   <tr
                     key={a.id}
@@ -514,6 +587,36 @@ export default function AgentsPage() {
                           onChange={(v) => update(a.id, { ship: v })}
                         />
                       </div>
+                    </td>
+                    <td className="px-2 py-1.5 text-meta tnum">
+                      {oUsd === null && oEur === null ? (
+                        <span className="text-muted">—</span>
+                      ) : (
+                        <>
+                          <div>
+                            {[
+                              oUsd !== null && `$${oUsd.toFixed(2)}`,
+                              oEur !== null && `€${oEur.toFixed(2)}`,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
+                          {(sUsd !== null || sEur !== null) && (
+                            <div
+                              className="text-[11px] text-muted"
+                              title="Including this agent's domestic shipping"
+                            >
+                              +ship:{" "}
+                              {[
+                                sUsd !== null && `$${sUsd.toFixed(2)}`,
+                                sEur !== null && `€${sEur.toFixed(2)}`,
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-1">
@@ -606,7 +709,9 @@ export default function AgentsPage() {
           = rate + processing fee, and is what the ranking uses. Tap ☆ to make
           an agent the baseline — every other agent then shows how much cheaper
           (green, −) or pricier (red, +) it is all-in. Click a column header to
-          sort; click any cell to edit.
+          sort; click any cell to edit. Your order = what the ¥ amount in that
+          column header costs with each agent (all-in), and underneath the same
+          with their domestic shipping added.
         </p>
 
         <p className="mt-10 text-meta">
