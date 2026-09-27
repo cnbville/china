@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Header } from "@/components/Header";
 import { getRates, type FxData } from "@/lib/fx";
 import { createClient } from "@/lib/supabase/client";
+import { numOnly } from "@/lib/numOnly";
 import { fetchAgents, num, syncAgents, toRow, type Agent } from "@/lib/agents";
 
 // Shipping-agent ranking. Saved to Supabase (shipping_agents), with a copy in
@@ -80,16 +81,6 @@ const minOf = (...xs: (number | null)[]) => {
   const ns = xs.filter((x): x is number => x !== null);
   return ns.length ? Math.min(...ns) : null;
 };
-
-// Keep only digits and one decimal point (a typed comma counts as the point),
-// so pasted values like "$148.90" or "3,5 %" become "148.90" / "3.5".
-function numOnly(v: string): string {
-  const cleaned = v.replace(/,/g, ".").replace(/[^0-9.]/g, "");
-  const dot = cleaned.indexOf(".");
-  return dot === -1
-    ? cleaned
-    : cleaned.slice(0, dot + 1) + cleaned.slice(dot + 1).replace(/\./g, "");
-}
 
 function pct(n: number | null): string {
   if (n === null) return "—";
