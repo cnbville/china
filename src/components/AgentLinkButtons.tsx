@@ -54,6 +54,14 @@ export function AgentLinkButtons({ url }: { url: string }) {
         <AgentIcon host={agent.hosts[0]} name={agent.name} size="sm" />
         Open in {agent.name} ↗
       </a>
+      {!agent.verified && (
+        <span
+          title={`${agent.name}'s link format isn't confirmed yet — check it opens the right product`}
+          className="text-[11px] text-amber-300/90"
+        >
+          unconfirmed format
+        </span>
+      )}
       <button
         type="button"
         onClick={copy}

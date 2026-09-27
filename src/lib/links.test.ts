@@ -2,6 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   AGENTS,
+  AGENTS_BY_KEY,
+  AGENTS_SORTED,
+  parseAgentGeneric,
   buildAgentLink,
   detectAgent,
   cleanLabel,
@@ -189,4 +192,92 @@ test("labels: a duplicate link keeps the first real label", () => {
 test("cleanLabel: trims separators and caps length", () => {
   assert.equal(cleanLabel("  **Hoodie** — "), "Hoodie");
   assert.equal(cleanLabel("x".repeat(120)).length, 80);
+});
+
+// --- All of Jadeship's agents, with real formats ---
+
+test("agents: exactly Jadeship's list of 36", () => {
+  const jadeship = [
+    "superbuy", "wegobuy", "pandabuy", "sugargoo", "cssbuy", "hagobuy", "basetao",
+    "kameymall", "cnfans", "ezbuycn", "hoobuy", "allchinabuy", "mulebuy",
+    "eastmallbuy", "hubbuycn", "joyabuy", "orientdig", "oopbuy", "lovegobuy",
+    "blikbuy", "hegobuy", "ponybuy", "panglobalbuy", "sifubuy", "loongbuy",
+    "kakobuy", "acbuy", "joyagoo", "itaobuy", "usfans", "cnshopper", "hipobuy",
+    "gtbuy", "fishgoo", "lolobuy", "litbuy",
+  ];
+  assert.deepEqual(AGENTS.map((a) => a.key).sort(), [...jadeship].sort());
+});
+
+test("agents: confirmed ones sort first", () => {
+  const firstUnverified = AGENTS_SORTED.findIndex((a) => !a.verified);
+  assert.ok(AGENTS_SORTED.slice(0, firstUnverified).every((a) => a.verified));
+  assert.ok(AGENTS_SORTED.slice(firstUnverified).every((a) => !a.verified));
+});
+
+// Real formats (from a live open-source converter + real product links).
+const real: [string, ParsedLink][] = [
+  ["https://www.acbuy.com/product/?id=7212345678&source=WD&u=9MLILB", { marketplace: "weidian", id: "7212345678" }],
+  ["https://www.acbuy.com/product/?id=654321&source=AL", { marketplace: "1688", id: "654321" }],
+  ["https://www.acbuy.com/product/?id=678901234567&source=TB", { marketplace: "taobao", id: "678901234567" }],
+  ["https://www.hoobuy.com/product/2/7212345678?utm_source=QX1Ke4G8", { marketplace: "weidian", id: "7212345678" }],
+  ["https://www.hoobuy.com/product/0/654321", { marketplace: "1688", id: "654321" }],
+  ["https://hoobuy.com/m/product/1/678901234567", { marketplace: "taobao", id: "678901234567" }],
+  ["https://www.oopbuy.com/product/weidian/7212345678?inviteCode=DWBB8ZQ4U", { marketplace: "weidian", id: "7212345678" }],
+  ["https://www.oopbuy.com/product/2/7212345678", { marketplace: "weidian", id: "7212345678" }],
+  ["https://www.oopbuy.com/product/1/678901234567", { marketplace: "taobao", id: "678901234567" }],
+  ["https://cnfans.com/product/?shop_type=ali_1688&id=654321&ref=71427", { marketplace: "1688", id: "654321" }],
+  ["https://www.allchinabuy.com/en/page/buy/?from=search-input&url=https%3A%2F%2Fweidian.com%2Fitem.html%3FitemID%3D7212345678&partnercode=wrf7xD", { marketplace: "weidian", id: "7212345678" }],
+  ["https://cnshopper.com/goods/detail?keyword=769941872984&platform=1688&invite_id=1997618", { marketplace: "1688", id: "769941872984" }],
+  ["https://cnshopper.com/goods/detail?keyword=1035221191373&platform=taobao&invite_id=1424233", { marketplace: "taobao", id: "1035221191373" }],
+  // Your CSSBuy link — their newer page style
+  ["https://www.cssbuy.com/shop/goodsDetail?type=micro&id=7832622051&promotionCode=dXVmaW5kcw", { marketplace: "weidian", id: "7832622051" }],
+  // More marketplace shapes
+  ["https://world.taobao.com/item/678901234567.htm", { marketplace: "taobao", id: "678901234567" }],
+  ["https://k.youshop10.com/item.html?itemID=7212345678", { marketplace: "weidian", id: "7212345678" }],
+];
+for (const [url, want] of real) {
+  test(`real link: ${url.slice(0, 70)}`, () => assert.deepEqual(parseLink(url), want));
+}
+
+test("real builds match the live formats exactly", () => {
+  const wd = { marketplace: "weidian" as const, id: "7212345678" };
+  assert.equal(buildAgentLink("acbuy", wd), "https://www.acbuy.com/product/?id=7212345678&source=WD");
+  assert.equal(buildAgentLink("hoobuy", wd), "https://www.hoobuy.com/product/2/7212345678");
+  assert.equal(buildAgentLink("oopbuy", wd), "https://www.oopbuy.com/product/weidian/7212345678");
+  assert.equal(buildAgentLink("cnfans", wd), "https://cnfans.com/product/?id=7212345678&shop_type=weidian");
+  assert.equal(
+    buildAgentLink("kakobuy", wd),
+    "https://www.kakobuy.com/item/details?url=https%3A%2F%2Fweidian.com%2Fitem.html%3FitemID%3D7212345678",
+  );
+  // Base that already has a query string gets "&", not a second "?".
+  assert.match(buildAgentLink("eastmallbuy", wd) ?? "", /searchlang=en&url=https%3A/);
+});
+
+test("safety net: an agent link in an unexpected shape still resolves", () => {
+  // e.g. an agent changes its page but keeps a marketplace word + id.
+  assert.deepEqual(parseLink("https://www.litbuy.com/products/details?id=7212345678&channel=weidian"), {
+    marketplace: "weidian",
+    id: "7212345678",
+  });
+  assert.deepEqual(parseLink("https://www.sifubuy.com/detail?url=https%3A%2F%2Fdetail.1688.com%2Foffer%2F654321.html"), {
+    marketplace: "1688",
+    id: "654321",
+  });
+  assert.deepEqual(parseAgentGeneric(new URL("https://x.test/p/taobao/678901234567")), {
+    marketplace: "taobao",
+    id: "678901234567",
+  });
+  // …but it doesn't invent products from unrelated sites.
+  assert.equal(parseLink("https://www.reddit.com/r/FashionReps/comments/1abc/?id=12345678"), null);
+});
+
+test("every agent has a working build for every marketplace", () => {
+  const mps = ["taobao", "tmall", "weidian", "1688"] as const;
+  for (const a of AGENTS) {
+    for (const marketplace of mps) {
+      const url = buildAgentLink(a.key, { marketplace, id: "7212345678" });
+      assert.ok(url && /^https:\/\//.test(url), `${a.key}/${marketplace}`);
+      assert.ok(AGENTS_BY_KEY[a.key]);
+    }
+  }
 });

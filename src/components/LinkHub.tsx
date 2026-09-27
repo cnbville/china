@@ -6,6 +6,7 @@ import QRCode from "qrcode";
 import { createClient } from "@/lib/supabase/client";
 import {
   AGENTS,
+  AGENTS_SORTED,
   buildAgentLink,
   detectAgent,
   extractLinkEntries,
@@ -635,23 +636,39 @@ function AgentPicker({ current, onPick }: { current: string | null; onPick: (k: 
   return (
     <div className="glass p-4">
       <div className="text-[11px] uppercase tracking-[0.2em] text-muted">Which agent do you buy through?</div>
-      <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-        {[...AGENTS].sort((a, b) => a.name.localeCompare(b.name)).map((a) => (
-          <button
-            key={a.key}
-            onClick={() => onPick(a.key)}
-            className={
-              "flex items-center gap-2 rounded-[8px] border px-2.5 py-2 text-left text-meta transition-colors " +
-              (current === a.key
-                ? "border-accent/60 bg-accent/10 text-ink"
-                : "border-transparent text-muted hover:border-line hover:bg-surface2/50 hover:text-ink")
-            }
-          >
-            <AgentIcon host={a.hosts[0]} name={a.name} size="sm" />
-            <span className="truncate">{a.name}</span>
-          </button>
-        ))}
-      </div>
+      {[true, false].map((verified) => (
+        <div key={String(verified)}>
+          {!verified && (
+            <div className="mt-4 flex items-center gap-2 text-[11px] text-muted">
+              <span className="uppercase tracking-[0.2em]">Unconfirmed formats</span>
+              <span className="h-px flex-1 bg-line/70" />
+            </div>
+          )}
+          {!verified && (
+            <p className="mt-1 text-[11px] text-muted/80">
+              Their link shape is a best guess — check the first link opens the right product.
+            </p>
+          )}
+          <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+            {AGENTS_SORTED.filter((a) => a.verified === verified).map((a) => (
+              <button
+                key={a.key}
+                onClick={() => onPick(a.key)}
+                title={a.verified ? a.name : `${a.name} — link format not confirmed yet`}
+                className={
+                  "flex items-center gap-2 rounded-[8px] border px-2.5 py-2 text-left text-meta transition-colors " +
+                  (current === a.key
+                    ? "border-accent/60 bg-accent/10 text-ink"
+                    : "border-transparent text-muted hover:border-line hover:bg-surface2/50 hover:text-ink")
+                }
+              >
+                <AgentIcon host={a.hosts[0]} name={a.name} size="sm" />
+                <span className="truncate">{a.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -775,9 +792,7 @@ function SingleResult({
 }) {
   const direct = marketplaceUrl(p.marketplace, p.id);
   const k = keyOf(p);
-  const others = AGENTS.filter((a) => a.key !== agent?.key).sort((a, b) =>
-    a.name.localeCompare(b.name),
-  );
+  const others = AGENTS_SORTED.filter((a) => a.key !== agent?.key);
 
   return (
     <div className="animate-rise">
@@ -806,6 +821,12 @@ function SingleResult({
               <div className="mt-1 line-clamp-2 break-all font-mono text-[11.5px] leading-relaxed text-muted">
                 {link}
               </div>
+              {agent && !agent.verified && (
+                <p className="mt-2 text-[11px] text-amber-300/90">
+                  {agent.name}&rsquo;s link format isn&rsquo;t confirmed yet — if this opens the wrong
+                  page, paste me a real {agent.name} link and I&rsquo;ll fix it.
+                </p>
+              )}
             </div>
           </div>
 
@@ -899,15 +920,19 @@ function SingleResult({
           return (
             <div
               key={a.key}
-              className="group flex items-center rounded-pill border border-line/80 bg-card/40 pl-1 pr-1 transition-colors hover:border-line hover:bg-card/80"
+              className={
+                "group flex items-center rounded-pill border bg-card/40 pl-1 pr-1 transition-colors hover:bg-card/80 " +
+                (a.verified ? "border-line/80 hover:border-line" : "border-dashed border-line/70 hover:border-line")
+              }
             >
               <button
                 onClick={() => onCopy(id, l, `Copied ${a.name} link`)}
-                className="flex items-center gap-1.5 py-1 pl-0.5 pr-2 text-meta text-ink"
-                title={`Copy ${a.name} link`}
+                className={"flex items-center gap-1.5 py-1 pl-0.5 pr-2 text-meta " + (a.verified ? "text-ink" : "text-muted")}
+                title={a.verified ? `Copy ${a.name} link` : `Copy ${a.name} link — format not confirmed yet`}
               >
                 <AgentIcon host={a.hosts[0]} name={a.name} size="sm" />
                 {copied === id ? <span className="text-accentSoft">Copied ✓</span> : a.name}
+                {!a.verified && copied !== id && <span className="text-[10px] text-muted/70">?</span>}
               </button>
               <button
                 onClick={() => onMakeFav(a.key)}
