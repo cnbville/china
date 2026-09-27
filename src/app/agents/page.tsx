@@ -465,9 +465,6 @@ export default function AgentsPage() {
                     Your order{sort === "order" && " ↓"}
                   </button>
                 </th>
-                <th className="px-2 py-2 text-left font-normal">
-                  Order + shipping
-                </th>
                 {th("fee", "Cheapest payment", "fee %")}
                 <th className="px-2 py-2 text-left font-normal">
                   Market rate
@@ -484,7 +481,7 @@ export default function AgentsPage() {
             <tbody>
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={13} className="px-3 py-8 text-center text-muted">
+                  <td colSpan={12} className="px-3 py-8 text-center text-muted">
                     No agents yet — add one above.
                   </td>
                 </tr>
@@ -503,8 +500,6 @@ export default function AgentsPage() {
                   dEur,
                   oUsd,
                   oEur,
-                  sUsd,
-                  sEur,
                 }) => (
                   <tr
                     key={a.id}
@@ -611,21 +606,6 @@ export default function AgentsPage() {
                               .join(" · ")}
                           </div>
                         </>
-                      )}
-                    </td>
-                    <td
-                      className="px-2 py-1.5 text-meta tnum"
-                      title="Including this agent's domestic shipping"
-                    >
-                      {sUsd === null && sEur === null ? (
-                        <span className="text-muted">—</span>
-                      ) : (
-                        [
-                          sUsd !== null && `$${sUsd.toFixed(2)}`,
-                          sEur !== null && `€${sEur.toFixed(2)}`,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")
                       )}
                     </td>
                     <td className="px-2 py-1.5">
