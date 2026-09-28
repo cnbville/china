@@ -55,6 +55,8 @@ const emptyItemDraft: ItemDraft = {
 export default function AddItemPage() {
   const router = useRouter();
   const [files, setFiles] = useState<File[]>([]);
+  // Bumped after a big import → the photo box asks "select 3 to keep".
+  const [pickRequest, setPickRequest] = useState(0);
   const [draft, setDraft] = useState<ItemDraft>(emptyItemDraft);
   const [collections, setCollections] = useState<Collection[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -125,6 +127,7 @@ export default function AddItemPage() {
           await Promise.all(Array.from({ length: Math.min(4, urls.length) }, worker));
           const collected = results.filter((f): f is File => f !== null);
           setFiles(collected);
+          if (collected.length > 3) setPickRequest((n) => n + 1);
           const missed = urls.length - collected.length;
           setImporting(
             missed > 0
@@ -283,7 +286,7 @@ export default function AddItemPage() {
         )}
 
         <form onSubmit={onSubmit} className="mt-6 space-y-8">
-          <PhotoInput files={files} onFiles={setFiles} />
+          <PhotoInput files={files} onFiles={setFiles} pickRequest={pickRequest} />
 
           <section className="space-y-4">
             <div>
