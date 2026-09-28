@@ -67,6 +67,16 @@ export default function ImportSetupPage() {
           Turn a listing into a draft item in one click — photos, link, and a
           price guess filled in for you. Set it up once.
         </p>
+        <Link
+          href="/extension"
+          className="mt-4 flex items-center justify-between gap-3 rounded-card border border-accent/30 bg-accent/5 px-4 py-3 text-meta text-ink transition-colors hover:border-accent/60"
+        >
+          <span>
+            On Opera GX / Chrome? The <span className="text-accentSoft">browser extension</span> does
+            this with one click — plus link converting on every page.
+          </span>
+          <span className="shrink-0 text-accentSoft">→</span>
+        </Link>
 
         <section className="mt-8 rounded-card border border-line bg-card p-5">
           <h2 className="text-meta uppercase tracking-[0.18em] text-muted">

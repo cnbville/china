@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Personal Catalog · Links</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img class="logo" src="icons/icon-128.png" alt="" />
+      <div class="brand">
+        <div class="name">Personal Catalog</div>
+        <div class="sub">Link converter</div>
+      </div>
+      <label class="agent">
+        <span id="agentIcon"></span>
+        <select id="agent"></select>
+      </label>
+    </header>
+
+    <textarea id="input" rows="2" spellcheck="false" placeholder="Paste a link — or a whole list…"></textarea>
+    <div id="summary" class="summary"></div>
+    <div id="out"></div>
+
+    <section class="settings">
+      <label class="toggle"><input type="checkbox" id="pill" /><span>Button on product pages</span></label>
+      <label class="toggle"><input type="checkbox" id="rewrite" /><span id="rewriteLabel">Convert product links on every site to your agent</span></label>
+    </section>
+
+    <footer>
+      <a id="hub" target="_blank">Link hub ↗</a>
+      <span id="ver"></span>
+    </footer>
+    <script src="popup.js"></script>
+  </body>
+</html>

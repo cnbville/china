@@ -419,7 +419,8 @@ export function parseLink(raw: string): ParsedLink | null {
 // --- Bulk extraction ---------------------------------------------------------
 
 // Hosts we recognise even when a link is pasted without "https://".
-const BARE_HOSTS = [
+// Exported for the browser extension (context-menu URL patterns).
+export const BARE_HOSTS = [
   "taobao.com",
   "tmall.com",
   "tmall.hk",

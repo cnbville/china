@@ -11,9 +11,12 @@ export default function LinksPage() {
       <Header />
       <main className="mx-auto max-w-2xl px-4 pb-16 pt-10">
         <LinkHub />
-        <p className="mt-10 text-meta">
+        <p className="mt-10 flex flex-wrap gap-5 text-meta">
           <Link href="/" className="text-muted underline hover:text-ink">
             ← Home
+          </Link>
+          <Link href="/extension" className="text-accentSoft hover:underline">
+            Get this in your browser — Opera GX extension →
           </Link>
         </p>
       </main>

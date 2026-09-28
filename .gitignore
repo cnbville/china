@@ -30,3 +30,6 @@ npm-debug.log*
 # local backups written by scripts/backup.ts default to a sibling folder,
 # but guard against anyone pointing it inside the repo
 /backups/
+
+# browser extension build output (npm run build:extension)
+/extension-build/
