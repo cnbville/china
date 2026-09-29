@@ -1,36 +1,82 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Measurement, MeasurementKind, MeasurementSet } from "./types";
 
-// Default field sets, so a new profile starts with the measurements that matter
-// (all cm, flat-lay for garments — how 1688/Taobao size charts are given).
+// Garment groups — the page is organised by these (shirts with shirts, jackets
+// with jackets, pants with pants). Stored in measurement_sets.garment_type.
+export const GARMENT_TYPES = ["Shirts", "Hoodies & sweaters", "Jackets", "Pants", "Shorts"] as const;
+export type GarmentType = (typeof GARMENT_TYPES)[number] | "Other";
+
+const TOPS = ["Shirts", "Hoodies & sweaters", "Jackets"];
+const BOTTOMS = ["Pants", "Shorts"];
+
+// Sets made before the groups existed were "Top" / "Bottom".
+const LEGACY: Record<string, GarmentType> = { Top: "Shirts", Bottom: "Pants" };
+
+/** Which group a set belongs to (legacy Top/Bottom fold into Shirts/Pants). */
+export function groupOf(type: string | null | undefined): GarmentType {
+  if (!type) return "Other";
+  if (LEGACY[type]) return LEGACY[type];
+  return (GARMENT_TYPES as readonly string[]).includes(type) ? (type as GarmentType) : "Other";
+}
+
+function familyOf(g: GarmentType): "tops" | "bottoms" | null {
+  return TOPS.includes(g) ? "tops" : BOTTOMS.includes(g) ? "bottoms" : null;
+}
+
+// Default field sets, only used until you have measurements of your own (all
+// cm, flat-lay for garments — how 1688/Taobao size charts are given).
+const TOP_FIELDS = ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Sleeve opening", "Hem width"];
+const BOTTOM_FIELDS = ["Waist", "Hip", "Thigh", "Inseam", "Front rise", "Leg opening", "Total length"];
 export const FIELD_TEMPLATES: Record<string, string[]> = {
-  Top: [
-    "Chest (pit-to-pit)",
-    "Shoulder",
-    "Length",
-    "Sleeve length",
-    "Sleeve opening",
-    "Hem width",
-  ],
-  Bottom: [
-    "Waist",
-    "Hip",
-    "Thigh",
-    "Inseam",
-    "Front rise",
-    "Leg opening",
-    "Total length",
-  ],
+  Shirts: TOP_FIELDS,
+  "Hoodies & sweaters": ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Cuff", "Hem width"],
+  Jackets: TOP_FIELDS,
+  Pants: BOTTOM_FIELDS,
+  Shorts: BOTTOM_FIELDS,
+  Other: TOP_FIELDS,
   Body: ["Height", "Chest", "Waist", "Hip", "Shoulder", "Arm length", "Inseam"],
 };
 
-// The garment types offered for reference / item profiles (each maps to a
-// template above; anything not listed falls back to the Top fields).
-export const GARMENT_TYPES = ["Top", "Bottom"] as const;
+/**
+ * The fields a new set starts with. YOUR measurements are the template: the
+ * labels (and order) of your own existing set win over the defaults —
+ *   body    → your body profile
+ *   garment → a fit reference of that type, then any set of that type, then
+ *             one from the same family (tops / bottoms), then the defaults.
+ */
+export function templateFor(
+  kind: MeasurementKind,
+  type: string | null | undefined,
+  sets: MeasurementSet[] = [],
+  fields: Record<string, Measurement[]> = {},
+): string[] {
+  const labelsOf = (s: MeasurementSet) =>
+    (fields[s.id] ?? []).map((m) => m.label.trim()).filter(Boolean);
+  const firstWith = (cands: MeasurementSet[]) => {
+    for (const s of cands) {
+      const l = labelsOf(s);
+      if (l.length) return l;
+    }
+    return null;
+  };
+  if (kind === "body") {
+    return firstWith(sets.filter((s) => s.kind === "body")) ?? FIELD_TEMPLATES.Body;
+  }
+  const g = groupOf(type);
+  const garments = sets.filter((s) => s.kind !== "body");
+  const same = garments.filter((s) => groupOf(s.garment_type) === g);
+  const fam = familyOf(g);
+  const kin = fam ? garments.filter((s) => familyOf(groupOf(s.garment_type)) === fam) : [];
+  const refsFirst = (xs: MeasurementSet[]) => [
+    ...xs.filter((s) => s.kind === "reference"),
+    ...xs.filter((s) => s.kind !== "reference").reverse(), // newest item first
+  ];
+  return firstWith(refsFirst(same)) ?? firstWith(refsFirst(kin)) ?? FIELD_TEMPLATES[g] ?? TOP_FIELDS;
+}
 
-export function templateFor(type: string | null | undefined): string[] {
-  if (type && FIELD_TEMPLATES[type]) return FIELD_TEMPLATES[type];
-  return FIELD_TEMPLATES.Top;
+/** Normalised label, so "Chest (pit-to-pit)" matches "chest" for comparisons. */
+export function labelKey(label: string): string {
+  return label.toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export async function loadMeasurements(supabase: SupabaseClient): Promise<{
@@ -83,6 +129,15 @@ export async function createSet(
     if (e2) throw e2;
   }
   return data as MeasurementSet;
+}
+
+export async function setGarmentType(
+  supabase: SupabaseClient,
+  id: string,
+  garment_type: string,
+): Promise<void> {
+  const { error } = await supabase.from("measurement_sets").update({ garment_type }).eq("id", id);
+  if (error) throw error;
 }
 
 export async function renameSet(
