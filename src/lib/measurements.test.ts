@@ -44,3 +44,8 @@ test("labelKey: ignores brackets, case and punctuation", () => {
   assert.equal(labelKey("Chest (pit-to-pit)"), labelKey("chest"));
   assert.equal(labelKey("Sleeve-length"), labelKey("sleeve length"));
 });
+
+test("default tops template is the user's own Neck Up fields", () => {
+  const want = ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Sleeve opening", "Neck width"];
+  for (const g of ["Shirts", "Hoodies & sweaters", "Jackets", "Top"]) assert.deepEqual(templateFor("reference", g), want);
+});
