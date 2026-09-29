@@ -25,11 +25,12 @@ function familyOf(g: GarmentType): "tops" | "bottoms" | null {
 
 // Default field sets, only used until you have measurements of your own (all
 // cm, flat-lay for garments — how 1688/Taobao size charts are given).
-const TOP_FIELDS = ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Sleeve opening", "Hem width"];
+// Tops follow YOUR "Neck Up" card: its fields, in its order.
+const TOP_FIELDS = ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Sleeve opening", "Neck width"];
 const BOTTOM_FIELDS = ["Waist", "Hip", "Thigh", "Inseam", "Front rise", "Leg opening", "Total length"];
 export const FIELD_TEMPLATES: Record<string, string[]> = {
   Shirts: TOP_FIELDS,
-  "Hoodies & sweaters": ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Cuff", "Hem width"],
+  "Hoodies & sweaters": TOP_FIELDS,
   Jackets: TOP_FIELDS,
   Pants: BOTTOM_FIELDS,
   Shorts: BOTTOM_FIELDS,
