@@ -13,6 +13,8 @@ import {
   parseLink,
   marketplaceUrl,
   twinMarketplace,
+  outputLink,
+  RAW_KEY,
   type Marketplace,
   type ParsedLink,
 } from "./links";
@@ -333,4 +335,12 @@ test("twinMarketplace: Taobao ⇄ Tmall only", () => {
   assert.equal(twinMarketplace("tmall"), "taobao");
   assert.equal(twinMarketplace("weidian"), null);
   assert.equal(twinMarketplace("1688"), null);
+});
+
+test("outputLink: raw gives the original, even for a saved agent link", () => {
+  const p = parseLink("https://www.cssbuy.com/item-micro-7832622051.html")!;
+  assert.equal(outputLink(RAW_KEY, p), "https://weidian.com/item.html?itemID=7832622051");
+  assert.equal(outputLink("cnfans", p), "https://cnfans.com/product/?id=7832622051&shop_type=weidian");
+  assert.equal(outputLink(null, p), null);
+  assert.ok(!AGENTS.some((a) => a.key === RAW_KEY), "raw must never clash with a real agent");
 });

@@ -43,3 +43,4 @@ textarea::placeholder{font-family:ui-sans-serif,system-ui,sans-serif;font-size:1
 footer{display:flex;justify-content:space-between;margin-top:12px;font-size:11px;color:var(--muted)}
 footer a{color:#ff8f9a;text-decoration:none}footer a:hover{text-decoration:underline}
 .toast{position:fixed;left:50%;bottom:12px;transform:translateX(-50%);padding:7px 13px;border-radius:999px;background:#1d1f28;border:1px solid var(--line);font-size:12px;white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.ico.raw{background:rgba(255,46,67,.18);color:#ff8f9a;border:1px solid rgba(255,46,67,.4)}

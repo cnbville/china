@@ -13,11 +13,13 @@ import {
   buildAgentLink,
   detectAgent,
   marketplaceUrl,
+  outputLink,
   parseLink,
+  RAW_KEY,
   type AgentDef,
   type ParsedLink,
 } from "../../src/lib/links";
-import { agentOf, APP_URL, faviconUrl, getSettings, MP_LABEL, onSettings, setSettings, type Settings } from "./shared";
+import { agentOf, APP_URL, faviconUrl, getSettings, isRaw, MP_LABEL, onSettings, setSettings, type Settings } from "./shared";
 
 let settings: Settings = { fav: null, pill: true, rewrite: false };
 
@@ -150,6 +152,7 @@ function renderPill() {
   const sel = document.createElement("select");
   sel.className = "sel";
   sel.append(new Option("Choose your agent…", ""));
+  sel.append(new Option("Raw link — the original", RAW_KEY, false, isRaw(settings.fav)));
   for (const a of AGENTS_SORTED) sel.append(new Option(a.name + (a.verified ? "" : " (?)"), a.key, false, a.key === settings.fav));
   sel.onchange = () => setSettings({ fav: sel.value || null });
   if (agent && agentLink) {
@@ -221,8 +224,8 @@ function renderPill() {
 // --- Rewrite product links on other sites -----------------------------------
 const ORIG = "data-pc-orig";
 function rewriteAll() {
-  const agent = agentOf(settings.fav);
-  const on = settings.rewrite && !!agent && !onKnownSite && !onCatalog;
+  const on = settings.rewrite && !!settings.fav && !onKnownSite && !onCatalog;
+  const label = isRaw(settings.fav) ? "Raw link" : agentOf(settings.fav)?.name ?? "";
   document.querySelectorAll<HTMLAnchorElement>("a[href]").forEach((a) => {
     const orig = a.getAttribute(ORIG);
     if (!on) {
@@ -240,11 +243,11 @@ function rewriteAll() {
       p = null;
     }
     if (!p) return;
-    const to = buildAgentLink(agent!.key, p);
+    const to = outputLink(settings.fav, p);
     if (!to || a.href === to) return;
     if (!orig) a.setAttribute(ORIG, from);
     a.href = to;
-    a.title = a.title || `${agent!.name} · ${MP_LABEL[p.marketplace]} #${p.id}`;
+    a.title = a.title || `${label} · ${MP_LABEL[p.marketplace]} #${p.id}`;
   });
 }
 let pending = 0;
@@ -261,7 +264,7 @@ function syncFromSite() {
   if (!onCatalog) return;
   try {
     const k = localStorage.getItem("link-fav-agent");
-    if (k && k !== settings.fav && agentOf(k)) setSettings({ fav: k });
+    if (k && k !== settings.fav && (isRaw(k) || agentOf(k))) setSettings({ fav: k });
   } catch {
     /* ignore */
   }

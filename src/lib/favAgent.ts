@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AGENTS } from "@/lib/links";
+import { AGENTS, RAW_KEY } from "@/lib/links";
 
 // "Your agent": the one agent every product link gets converted to. Stored in
 // this browser (same key the Link converter has always used) and shared live
-// between the header picker, the Link converter and item pages.
+// between the header picker, the Link converter and item pages. RAW_KEY
+// ("Raw link") is a valid choice too: everything comes out as the original.
 
 const FAV_KEY = "link-fav-agent";
 const CHANGE = "fav-agent-change";
@@ -14,7 +15,7 @@ const OPEN_PICKER = "open-agent-picker";
 export function getFavAgent(): string | null {
   try {
     const k = localStorage.getItem(FAV_KEY);
-    return k && AGENTS.some((a) => a.key === k) ? k : null;
+    return k && (k === RAW_KEY || AGENTS.some((a) => a.key === k)) ? k : null;
   } catch {
     return null;
   }

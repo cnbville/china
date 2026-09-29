@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AGENTS, AGENTS_SORTED } from "@/lib/links";
+import { AGENTS, AGENTS_SORTED, RAW_KEY } from "@/lib/links";
 import { onOpenAgentPicker, useFavAgent } from "@/lib/favAgent";
-import { AgentIcon } from "@/components/AgentIcon";
+import { AgentIcon, RawIcon } from "@/components/AgentIcon";
 
 
 // Header pill: pick the agent every product link converts to. Same setting as
@@ -13,6 +13,7 @@ export function AgentMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const agent = AGENTS.find((a) => a.key === fav) ?? null;
+  const raw = fav === RAW_KEY;
 
   // "Choose agent…" buttons elsewhere open this menu.
   useEffect(() => onOpenAgentPicker(() => setOpen(true)), []);
@@ -43,7 +44,7 @@ export function AgentMenu() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        title={agent ? `Links convert to ${agent.name}` : "Choose your agent"}
+        title={agent ? `Links convert to ${agent.name}` : raw ? "Links come out as the raw original" : "Choose your agent"}
         aria-haspopup="menu"
         aria-expanded={open}
         className={
@@ -57,12 +58,14 @@ export function AgentMenu() {
       >
         {agent ? (
           <AgentIcon host={agent.hosts[0]} name={agent.name} size="sm" />
+        ) : raw ? (
+          <RawIcon size="sm" />
         ) : (
           <span className="grid h-5 w-5 place-items-center rounded-[5px] border border-line text-[11px]">
             ?
           </span>
         )}
-        <span className="text-ink">{agent ? agent.name : "Agent"}</span>
+        <span className="text-ink">{agent ? agent.name : raw ? "Raw link" : "Agent"}</span>
         <svg
           viewBox="0 0 24 24"
           className={
@@ -86,12 +89,16 @@ export function AgentMenu() {
           <div className="px-2 py-1 text-[11px] uppercase tracking-[0.2em] text-muted">
             Convert links to
           </div>
-          <MenuItem active={!agent} onClick={() => pick(null)}>
-            <span className="grid h-5 w-5 place-items-center rounded-[5px] border border-line text-[10px] text-muted">
-              ↗
+          <MenuItem active={raw} onClick={() => pick(RAW_KEY)}>
+            <RawIcon size="sm" />
+            <span>
+              Raw link
+              <span className="block text-[10.5px] leading-tight text-muted/80">
+                The original Taobao / Weidian / 1688 link
+              </span>
             </span>
-            Direct link (no agent)
           </MenuItem>
+          <div className="mx-2 my-1 border-t border-line/70" />
           {AGENTS_SORTED.map((a, i) => (
             <div key={a.key}>
               {!a.verified && AGENTS_SORTED[i - 1]?.verified && (

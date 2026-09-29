@@ -12,6 +12,7 @@ import {
   extractLinkEntries,
   marketplaceUrl,
   parseLink,
+  RAW_KEY,
   twinMarketplace,
   type Marketplace,
   type ParsedLink,
@@ -20,7 +21,7 @@ import { linkKey } from "@/lib/linkKey";
 import { loadLinkIndex, type LinkHit } from "@/lib/linkIndex";
 import { buildImportHash } from "@/lib/import";
 import { useFavAgent } from "@/lib/favAgent";
-import { AgentIcon } from "@/components/AgentIcon";
+import { AgentIcon, RawIcon } from "@/components/AgentIcon";
 
 // The Link hub: the front door for any product link. Paste one link and it's
 // converted for your agent, checked against everything you already have, and
@@ -165,6 +166,8 @@ export function LinkHub() {
   }, []);
 
   const favAgent: Agent | null = AGENTS.find((a) => a.key === fav) ?? null;
+  // "Raw link" picked like an agent: everything comes out as the original.
+  const isRaw = fav === RAW_KEY;
 
   function chooseFav(key: string | null) {
     setFav(key);
@@ -452,6 +455,7 @@ export function LinkHub() {
             </span>
             <AgentSwitch
               agent={favAgent}
+              raw={isRaw}
               onClick={() => setPicking((v) => !v)}
               open={picking}
             />
@@ -547,6 +551,7 @@ export function LinkHub() {
         <SingleResult
           p={single.parsed}
           agent={favAgent}
+          raw={isRaw}
           source={single.source}
           link={singleLink}
           hit={index.get(keyOf(single.parsed))}
@@ -571,6 +576,7 @@ export function LinkHub() {
           products={analysis.products}
           unknown={analysis.unknown}
           agent={favAgent}
+          raw={isRaw}
           index={index}
           copied={copied}
           busy={busy}
@@ -634,7 +640,7 @@ function MarketBadge({ mp }: { mp: Marketplace }) {
   );
 }
 
-function AgentSwitch({ agent, onClick, open }: { agent: Agent | null; onClick: () => void; open: boolean }) {
+function AgentSwitch({ agent, raw, onClick, open }: { agent: Agent | null; raw: boolean; onClick: () => void; open: boolean }) {
   return (
     <button
       onClick={onClick}
@@ -648,6 +654,11 @@ function AgentSwitch({ agent, onClick, open }: { agent: Agent | null; onClick: (
         <>
           <AgentIcon host={agent.hosts[0]} name={agent.name} size="sm" />
           <span className="text-ink">{agent.name}</span>
+        </>
+      ) : raw ? (
+        <>
+          <RawIcon size="sm" />
+          <span className="text-ink">Raw link</span>
         </>
       ) : (
         <span>Choose your agent</span>
@@ -663,6 +674,24 @@ function AgentPicker({ current, onPick }: { current: string | null; onPick: (k: 
   return (
     <div className="glass p-4">
       <div className="text-[11px] uppercase tracking-[0.2em] text-muted">Which agent do you buy through?</div>
+      <button
+        onClick={() => onPick(RAW_KEY)}
+        className={
+          "mt-3 flex w-full items-center gap-3 rounded-[10px] border px-3 py-2.5 text-left transition-colors " +
+          (current === RAW_KEY
+            ? "border-accent/60 bg-accent/10"
+            : "border-line/70 hover:border-line hover:bg-surface2/50")
+        }
+      >
+        <RawIcon size="md" />
+        <span className="min-w-0">
+          <span className="block text-body text-ink">Raw link</span>
+          <span className="block text-[11.5px] text-muted">
+            No agent — always the original Taobao / Tmall / Weidian / 1688 link, even from a CSSBuy or CNFans link.
+          </span>
+        </span>
+        {current === RAW_KEY && <span className="ml-auto text-accentSoft">✓</span>}
+      </button>
       {[true, false].map((verified) => (
         <div key={String(verified)}>
           {!verified && (
@@ -787,6 +816,7 @@ function ActionButton({
 function SingleResult({
   p,
   agent,
+  raw,
   source,
   link,
   hit,
@@ -804,6 +834,7 @@ function SingleResult({
 }: {
   p: ParsedLink;
   agent: Agent | null;
+  raw: boolean;
   source: Agent | null;
   link: string | null;
   hit: LinkHit | undefined;
@@ -910,6 +941,7 @@ function SingleResult({
         </div>
 
         {/* The other direction: your agent's link, or the clean original */}
+        {!(reverse && !agent && raw) && (
         <div className="flex items-center gap-3 border-t border-line/60 px-5 py-3">
           {reverse ? (
             agent && link ? (
@@ -953,6 +985,7 @@ function SingleResult({
             </>
           )}
         </div>
+        )}
 
         {/* Keep it */}
         <div className="border-t border-line/60 bg-surface2/25 px-5 py-3">
@@ -1047,6 +1080,7 @@ function BulkResult({
   products,
   unknown,
   agent,
+  raw,
   index,
   copied,
   busy,
@@ -1064,6 +1098,7 @@ function BulkResult({
   products: Product[];
   unknown: string[];
   agent: Agent | null;
+  raw: boolean;
   index: Map<string, LinkHit>;
   copied: string | null;
   busy: string | null;
@@ -1128,7 +1163,7 @@ function BulkResult({
           <button onClick={onCsv} disabled={!products.length} className="btn-ghost !py-2 disabled:opacity-50">
             Export CSV
           </button>
-          {!agent && (
+          {!agent && !raw && (
             <button onClick={onPickAgent} className="ml-auto text-meta text-accentSoft hover:underline">
               Choose your agent →
             </button>
