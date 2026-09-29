@@ -38,8 +38,14 @@ export const FIELD_TEMPLATES: Record<string, string[]> = {
   Body: ["Height", "Chest", "Waist", "Hip", "Shoulder", "Arm length", "Inseam"],
 };
 
+/** Which template slot a set fills: "Body", or its garment group. */
+export function templateSlot(s: Pick<MeasurementSet, "kind" | "garment_type">): string {
+  return s.kind === "body" ? "Body" : groupOf(s.garment_type);
+}
+
 /**
- * The fields a new set starts with. YOUR measurements are the template: the
+ * The fields a new set starts with. A card you marked "template" for that
+ * group wins (`chosen`: slot → set id). Otherwise YOUR measurements are the template: the
  * labels (and order) of your own existing set win over the defaults —
  *   body    → your body profile
  *   garment → a fit reference of that type, then any set of that type, then
@@ -50,6 +56,7 @@ export function templateFor(
   type: string | null | undefined,
   sets: MeasurementSet[] = [],
   fields: Record<string, Measurement[]> = {},
+  chosen: Record<string, string> = {},
 ): string[] {
   const labelsOf = (s: MeasurementSet) =>
     (fields[s.id] ?? []).map((m) => m.label.trim()).filter(Boolean);
@@ -60,10 +67,17 @@ export function templateFor(
     }
     return null;
   };
+  const picked = (slot: string) => sets.filter((s) => s.id === chosen[slot]);
   if (kind === "body") {
-    return firstWith(sets.filter((s) => s.kind === "body")) ?? FIELD_TEMPLATES.Body;
+    return (
+      firstWith(picked("Body")) ??
+      firstWith(sets.filter((s) => s.kind === "body")) ??
+      FIELD_TEMPLATES.Body
+    );
   }
   const g = groupOf(type);
+  const mine = firstWith(picked(g));
+  if (mine) return mine;
   const garments = sets.filter((s) => s.kind !== "body");
   const same = garments.filter((s) => groupOf(s.garment_type) === g);
   const fam = familyOf(g);
@@ -72,7 +86,17 @@ export function templateFor(
     ...xs.filter((s) => s.kind === "reference"),
     ...xs.filter((s) => s.kind !== "reference").reverse(), // newest item first
   ];
-  return firstWith(refsFirst(same)) ?? firstWith(refsFirst(kin)) ?? FIELD_TEMPLATES[g] ?? TOP_FIELDS;
+  // A template you picked for a sibling group (e.g. Shirts → a new Jacket).
+  const kinPicked = fam
+    ? GARMENT_TYPES.filter((x) => x !== g && familyOf(x) === fam).flatMap((x) => picked(x))
+    : [];
+  return (
+    firstWith(refsFirst(same)) ??
+    firstWith(kinPicked) ??
+    firstWith(refsFirst(kin)) ??
+    FIELD_TEMPLATES[g] ??
+    TOP_FIELDS
+  );
 }
 
 /** Normalised label, so "Chest (pit-to-pit)" matches "chest" for comparisons. */

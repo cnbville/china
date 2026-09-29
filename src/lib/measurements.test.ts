@@ -49,3 +49,20 @@ test("default tops template is the user's own Neck Up fields", () => {
   const want = ["Chest (pit-to-pit)", "Shoulder", "Length", "Sleeve length", "Sleeve opening", "Neck width"];
   for (const g of ["Shirts", "Hoodies & sweaters", "Jackets", "Top"]) assert.deepEqual(templateFor("reference", g), want);
 });
+
+test("templateFor: a card you marked as template wins for its group", () => {
+  const sets = [set("r", "reference", "Shirts"), set("i", "item", "Shirts"), set("b1", "body", null), set("b2", "body", null)];
+  const fields = {
+    r: rows("r", ["Chest", "Length"]),
+    i: rows("i", ["Chest", "Length", "Neck width"]),
+    b1: rows("b1", ["Height"]),
+    b2: rows("b2", ["Height", "Weight"]),
+  };
+  const chosen = { Shirts: "i", Body: "b2" };
+  assert.deepEqual(templateFor("item", "Shirts", sets, fields, chosen), ["Chest", "Length", "Neck width"]);
+  assert.deepEqual(templateFor("body", null, sets, fields, chosen), ["Height", "Weight"]);
+  // A new jacket (nothing of its own yet) borrows the picked shirt template.
+  assert.deepEqual(templateFor("reference", "Jackets", sets, fields, chosen), ["Chest", "Length", "Neck width"]);
+  // A deleted template falls back gracefully.
+  assert.deepEqual(templateFor("item", "Shirts", sets, fields, { Shirts: "gone" }), ["Chest", "Length"]);
+});
