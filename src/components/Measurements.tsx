@@ -15,6 +15,7 @@ import {
   renameSet,
   setGarmentType,
   templateFor,
+  templateSlot,
   updateField,
   type GarmentType,
 } from "@/lib/measurements";
@@ -25,7 +26,8 @@ import type { Measurement, MeasurementKind, MeasurementSet } from "@/lib/types";
 //   Shirts / Hoodies & sweaters / Jackets / Pants / Shorts — each group holds
 //             your fit reference ("the one that fits perfectly") and the
 //             measurements of specific items, compared against it.
-// New cards start from YOUR fields (see templateFor), not generic defaults.
+// New cards start from YOUR fields (see templateFor), not generic defaults —
+// and "☆ Use as template" on any card makes it THE template for its group.
 // Everything saves as you go (label/value on blur, add/remove immediately).
 
 function parseCm(s: string): number | null {
@@ -41,6 +43,8 @@ function fmtCm(v: number | null): string {
 type ItemLite = { id: string; title: string };
 type View = "All" | GarmentType;
 const VIEW_KEY = "measurements-view";
+// The card you starred as the template for each group ("Body", "Shirts", …).
+const TEMPLATE_KEY = "measurement-templates";
 const GROUPS: GarmentType[] = [...GARMENT_TYPES, "Other"];
 const SINGULAR: Record<GarmentType, string> = {
   Shirts: "shirt",
@@ -58,6 +62,7 @@ export function Measurements() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setViewState] = useState<View>("All");
+  const [chosen, setChosen] = useState<Record<string, string>>({});
 
   async function reload() {
     try {
@@ -79,6 +84,12 @@ export function Measurements() {
 
   useEffect(() => {
     reload();
+    try {
+      const t = JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? "{}");
+      if (t && typeof t === "object") setChosen(t);
+    } catch {
+      /* ignore */
+    }
     try {
       const v = localStorage.getItem(VIEW_KEY) as View | null;
       if (v && (v === "All" || GROUPS.includes(v as GarmentType))) setViewState(v);
@@ -111,7 +122,7 @@ export function Measurements() {
         name: name.trim() || "Untitled",
         garment_type: garmentType,
         item_id: itemId,
-        labels: templateFor(kind, garmentType, sets, fields),
+        labels: templateFor(kind, garmentType, sets, fields, chosen),
       });
       await reload();
     } catch (e) {
@@ -160,11 +171,29 @@ export function Measurements() {
     setSets((s) => s.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   }
 
+  // Star a card: new cards in its group start with its fields. Tap again to unset.
+  function toggleTemplate(s: MeasurementSet) {
+    const slot = templateSlot(s);
+    setChosen((c) => {
+      const next = { ...c };
+      if (next[slot] === s.id) delete next[slot];
+      else next[slot] = s.id;
+      try {
+        localStorage.setItem(TEMPLATE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+
   // Everything a card needs, wired once.
   function cardProps(s: MeasurementSet) {
     return {
       set: s,
       fields: fields[s.id] ?? [],
+      isTemplate: chosen[templateSlot(s)] === s.id,
+      onTemplate: () => toggleTemplate(s),
       onRename: (n: string) => {
         patchSetLocal(s.id, { name: n });
         renameSet(supabase, s.id, n).catch(() => {});
@@ -487,6 +516,8 @@ function SetCard({
   itemTitle,
   itemId,
   compare,
+  isTemplate,
+  onTemplate,
   onMove,
   onRename,
   onAddField,
@@ -500,6 +531,8 @@ function SetCard({
   itemTitle?: string;
   itemId?: string | null;
   compare?: Map<string, number>;
+  isTemplate: boolean;
+  onTemplate: () => void;
   onMove?: (g: GarmentType) => void;
   onRename: (name: string) => void;
   onAddField: () => void;
@@ -518,7 +551,7 @@ function SetCard({
             onBlur={(e) => onRename(e.target.value)}
             className="w-full bg-transparent font-serif text-lg text-ink outline-none"
           />
-          <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted">
             {onMove && (
               <select
                 value={groupOf(set.garment_type)}
@@ -543,6 +576,23 @@ function SetCard({
             )}
           </div>
         </div>
+        <button
+          type="button"
+          onClick={onTemplate}
+          title={
+            isTemplate
+              ? "This is your template — tap to stop using it"
+              : `Make this the template: new ${set.kind === "body" ? "body profiles" : groupOf(set.garment_type).toLowerCase()} start with these fields`
+          }
+          className={
+            "mt-0.5 shrink-0 whitespace-nowrap rounded-pill border px-2.5 py-1 text-[11px] transition-colors " +
+            (isTemplate
+              ? "border-accent/60 bg-accent/15 text-accentSoft"
+              : "border-line text-muted hover:border-accent/50 hover:text-ink")
+          }
+        >
+          {isTemplate ? "★ Template" : "☆ Use as template"}
+        </button>
         <button
           type="button"
           onClick={onDelete}
@@ -666,7 +716,7 @@ function NewSetForm({
         placeholder={kind === "reference" ? `e.g. "My perfect ${single}"` : "Label — e.g. 'Size L'"}
         className="input mt-2"
       />
-      <p className="mt-2 text-[11px] text-muted">Starts with the same fields as your own {single} measurements.</p>
+      <p className="mt-2 text-[11px] text-muted">Starts with the fields of your ★ template (or your own {single} measurements).</p>
       <div className="mt-3 flex items-center gap-2">
         <button
           type="button"
