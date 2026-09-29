@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
 import { linkKey } from "@/lib/linkKey";
+import { AgentLinkButtons } from "@/components/AgentLinkButtons";
 import type { SavedLink } from "@/lib/types";
 
 // "Later": a stash of factory links to look at later. A holding pen, separate
@@ -384,10 +385,11 @@ export function LaterLinks() {
                     </div>
                   </a>
 
-                  <div className="flex items-center gap-1 border-t border-line/70 px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-1 border-t border-line/70 px-3 py-2">
                     <a href={l.url} target="_blank" rel="noreferrer" className="rounded-pill px-2.5 py-1 text-meta text-accentSoft/90 transition-colors hover:bg-surface2 hover:text-accentSoft">
                       Open ↗
                     </a>
+                    <AgentLinkButtons url={l.url} compact />
                     <button
                       onClick={() => setEditing({ id: l.id, title: l.title ?? "", note: l.note ?? "", url: l.url })}
                       className="rounded-pill px-2.5 py-1 text-meta text-muted transition-colors hover:bg-surface2 hover:text-ink"

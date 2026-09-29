@@ -301,6 +301,17 @@ function allParams(u: URL): URLSearchParams {
 }
 
 /** Build a link to `agentKey` for a parsed product. Null if the agent is unknown. */
+/** "Raw link": pick it like an agent and every product link — even one saved
+ *  from CSSBuy, CNFans … — comes out as the original Taobao / Tmall / Weidian /
+ *  1688 link. */
+export const RAW_KEY = "raw";
+
+/** The link for your chosen output: an agent key, or RAW_KEY for the original. */
+export function outputLink(key: string | null, p: ParsedLink): string | null {
+  if (key === RAW_KEY) return marketplaceUrl(p.marketplace, p.id);
+  return key ? buildAgentLink(key, p) : null;
+}
+
 export function buildAgentLink(agentKey: string, p: ParsedLink): string | null {
   const a = AGENTS_BY_KEY[agentKey];
   if (!a) return null;

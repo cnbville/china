@@ -4,7 +4,7 @@
 
 import { BARE_HOSTS, buildAgentLink, marketplaceUrl, parseLink } from "../../src/lib/links";
 import { extractPage } from "./extract";
-import { agentOf, getSettings, importUrl, MP_LABEL, onSettings, type Settings } from "./shared";
+import { agentOf, getSettings, importUrl, isRaw, MP_LABEL, onSettings, type Settings } from "./shared";
 
 const PATTERNS = BARE_HOSTS.flatMap((h) => [`*://${h}/*`, `*://*.${h}/*`]);
 
@@ -24,11 +24,11 @@ function buildMenus(s: Settings) {
       if (agent) {
         add(`${where}:open-agent`, `Open ${what} in ${agent.name}`, where);
         add(`${where}:copy-agent`, `Copy ${agent.name} link`, where);
-      } else {
+      } else if (!isRaw(s.fav)) {
         add(`${where}:pick`, "Choose your agent… (click the extension icon)", where);
       }
-      add(`${where}:copy-original`, "Copy original link", where);
-      add(`${where}:open-original`, "Open original link", where);
+      add(`${where}:copy-original`, "Copy raw link", where);
+      add(`${where}:open-original`, "Open raw link", where);
       add(`${where}:catalog`, "Add to catalog", where);
     }
   });

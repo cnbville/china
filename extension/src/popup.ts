@@ -9,10 +9,11 @@ import {
   extractLinks,
   marketplaceUrl,
   parseLink,
+  RAW_KEY,
   type AgentDef,
   type ParsedLink,
 } from "../../src/lib/links";
-import { agentOf, APP_URL, faviconUrl, getSettings, MP_LABEL, setSettings, type Settings } from "./shared";
+import { agentOf, APP_URL, faviconUrl, getSettings, isRaw, MP_LABEL, setSettings, type Settings } from "./shared";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const input = $<HTMLTextAreaElement>("input");
@@ -155,6 +156,10 @@ function render() {
 
 function renderAgentPicker() {
   agentSel.replaceChildren(new Option("Choose agent…", ""));
+  const rawGroup = document.createElement("optgroup");
+  rawGroup.label = "No agent";
+  rawGroup.append(new Option("Raw link (original)", RAW_KEY, false, isRaw(settings.fav)));
+  agentSel.append(rawGroup);
   let group: HTMLOptGroupElement | null = null;
   for (const a of AGENTS_SORTED) {
     const label = a.verified ? "Confirmed" : "Unconfirmed formats";
@@ -166,8 +171,10 @@ function renderAgentPicker() {
     group.append(new Option(a.name, a.key, false, a.key === settings.fav));
   }
   const a = agentOf(settings.fav);
-  $("agentIcon").replaceChildren(...(a ? [icon(a)] : []));
-  $("rewriteLabel").textContent = `Convert product links on every site to ${a ? a.name : "your agent"}`;
+  $("agentIcon").replaceChildren(...(a ? [icon(a)] : isRaw(settings.fav) ? [h("span", "ico raw", "↗")] : []));
+  $("rewriteLabel").textContent = isRaw(settings.fav)
+    ? "Turn agent links on every site back into raw links"
+    : `Convert product links on every site to ${a ? a.name : "your agent"}`;
 }
 
 async function boot() {

@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
 import { linkKey } from "@/lib/linkKey";
+import { parseLink } from "@/lib/links";
+import { AgentLinkButtons } from "@/components/AgentLinkButtons";
 import type { JunkLink } from "@/lib/types";
 
 // "Junk": the scratch drawer. Just a link + a note, dumped fast and listed
@@ -159,6 +161,11 @@ export function JunkLinks() {
                     <span className="text-line">·</span>
                     <span className="tnum">{fmtDate(l.created_at)}</span>
                   </div>
+                  {parseLink(l.url) && (
+                    <div className="-ml-2.5 mt-1 flex flex-wrap items-center">
+                      <AgentLinkButtons url={l.url} compact />
+                    </div>
+                  )}
                 </div>
                 <a
                   href={l.url}
