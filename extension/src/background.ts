@@ -4,33 +4,31 @@
 
 import { BARE_HOSTS, buildAgentLink, marketplaceUrl, parseLink } from "../../src/lib/links";
 import { extractPage } from "./extract";
-import { agentOf, getSettings, importUrl, isRaw, MP_LABEL, onSettings, type Settings } from "./shared";
+import { agentOf, getSettings, importUrl, MP_LABEL, onSettings, type Settings } from "./shared";
 
 const PATTERNS = BARE_HOSTS.flatMap((h) => [`*://${h}/*`, `*://*.${h}/*`]);
 
+// Right-click a product link (on any site): one short list, grouped —
+//   Open in <agent> · Copy <agent> link | Open raw link · Copy raw link | Add to catalog
+// On a product page itself the floating bar does the same, so the menu stays
+// link-only (no doubled-up page + link entries).
 function buildMenus(s: Settings) {
   chrome.contextMenus.removeAll(() => {
     const agent = agentOf(s.fav);
     type Ctx = NonNullable<chrome.contextMenus.CreateProperties["contexts"]>;
-    const add = (id: string, title: string, where: "link" | "page") =>
-      chrome.contextMenus.create({
-        id,
-        title,
-        contexts: [where] as unknown as Ctx,
-        ...(where === "link" ? { targetUrlPatterns: PATTERNS } : { documentUrlPatterns: PATTERNS }),
-      });
-    for (const where of ["link", "page"] as const) {
-      const what = where === "link" ? "link" : "page";
-      if (agent) {
-        add(`${where}:open-agent`, `Open ${what} in ${agent.name}`, where);
-        add(`${where}:copy-agent`, `Copy ${agent.name} link`, where);
-      } else if (!isRaw(s.fav)) {
-        add(`${where}:pick`, "Choose your agent… (click the extension icon)", where);
-      }
-      add(`${where}:copy-original`, "Copy raw link", where);
-      add(`${where}:open-original`, "Open raw link", where);
-      add(`${where}:catalog`, "Add to catalog", where);
+    const base = { contexts: ["link"] as unknown as Ctx, targetUrlPatterns: PATTERNS };
+    let sep = 0;
+    const add = (id: string, title: string) => chrome.contextMenus.create({ ...base, id, title });
+    const line = () => chrome.contextMenus.create({ ...base, id: `sep${sep++}`, type: "separator" });
+    if (agent) {
+      add("open-agent", `Open in ${agent.name}`);
+      add("copy-agent", `Copy ${agent.name} link`);
+      line();
     }
+    add("open-original", "Open raw link");
+    add("copy-original", "Copy raw link");
+    line();
+    add("catalog", "Add to catalog");
   });
 }
 
@@ -70,27 +68,22 @@ async function addToCatalog(tab: chrome.tabs.Tab | undefined, linkUrl?: string) 
 }
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  const [where, action] = String(info.menuItemId).split(":");
-  const raw = where === "link" ? info.linkUrl : info.pageUrl ?? tab?.url;
+  const action = String(info.menuItemId);
+  const raw = info.linkUrl;
+  if (action === "catalog") return addToCatalog(tab, raw);
   const p = raw ? parseLink(raw) : null;
-  const s = await getSettings();
-  const agent = agentOf(s.fav);
-  if (action === "pick") {
-    chrome.action.openPopup?.().catch(() => {});
-    return;
-  }
-  if (action === "catalog") return addToCatalog(tab, where === "link" ? info.linkUrl : undefined);
   if (!p) {
     copyInTab(tab?.id, "", "No product in that link");
     return;
   }
+  const agent = agentOf((await getSettings()).fav);
   const original = marketplaceUrl(p.marketplace, p.id);
   const agentLink = agent ? buildAgentLink(agent.key, p) : null;
   const open = (url: string) => chrome.tabs.create({ url, index: (tab?.index ?? 0) + 1 });
   if (action === "open-agent" && agentLink) open(agentLink);
   if (action === "open-original") open(original);
   if (action === "copy-agent" && agentLink) copyInTab(tab?.id, agentLink, `Copied ${agent!.name} link`);
-  if (action === "copy-original") copyInTab(tab?.id, original, `Copied original ${MP_LABEL[p.marketplace]} link`);
+  if (action === "copy-original") copyInTab(tab?.id, original, `Copied raw ${MP_LABEL[p.marketplace]} link`);
 });
 
 // From the page button / popup.

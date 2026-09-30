@@ -12,23 +12,24 @@
         <div class="name">Personal Catalog</div>
         <div class="sub">Link converter</div>
       </div>
-      <label class="agent">
-        <span id="agentIcon"></span>
-        <select id="agent"></select>
-      </label>
+      <button id="gear" class="hb" title="Settings" aria-expanded="false"></button>
     </header>
 
-    <textarea id="input" rows="2" spellcheck="false" placeholder="Paste a link — or a whole list…"></textarea>
+    <section id="settings" class="settings" hidden>
+      <label class="toggle"><input type="checkbox" id="pill" /><span>Floating bar on product pages</span></label>
+      <label class="toggle"><input type="checkbox" id="rewrite" /><span id="rewriteLabel">Convert product links on every site</span></label>
+      <button id="unshrink" class="linkish" hidden>Show the bar again on sites where you shrank it</button>
+    </section>
+
+    <div class="field">
+      <textarea id="input" rows="2" spellcheck="false" placeholder="Paste a product link — or a whole list"></textarea>
+      <button id="clear" class="clear" title="Clear" hidden>×</button>
+    </div>
     <div id="summary" class="summary"></div>
     <div id="out"></div>
 
-    <section class="settings">
-      <label class="toggle"><input type="checkbox" id="pill" /><span>Button on product pages</span></label>
-      <label class="toggle"><input type="checkbox" id="rewrite" /><span id="rewriteLabel">Convert product links on every site to your agent</span></label>
-    </section>
-
     <footer>
-      <a id="hub" target="_blank">Link hub ↗</a>
+      <a id="hub" target="_blank">Open Link hub ↗</a>
       <span id="ver"></span>
     </footer>
     <script src="popup.js"></script>

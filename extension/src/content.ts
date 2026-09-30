@@ -1,25 +1,16 @@
 /// <reference types="chrome" />
 // Runs on every page:
 //  • product pages (Taobao / Tmall / Weidian / 1688 or any agent's item page):
-//    a small floating button — your agent, the original link, every agent,
-//    add to catalog;
+//    a small floating bar — open in your agent (or the raw link on an agent's
+//    page), copy it, and a panel with both links, every agent and "Add to
+//    catalog". Shrinks to a dot per site if it's in the way;
 //  • everywhere else (Reddit, Discord web, spreadsheets …), if you turned it on:
 //    product links point at your agent instead;
 //  • the Personal Catalog site: picks up the agent you chose there.
 
-import {
-  AGENTS_SORTED,
-  BARE_HOSTS,
-  buildAgentLink,
-  detectAgent,
-  marketplaceUrl,
-  outputLink,
-  parseLink,
-  RAW_KEY,
-  type AgentDef,
-  type ParsedLink,
-} from "../../src/lib/links";
-import { agentOf, APP_URL, faviconUrl, getSettings, isRaw, MP_LABEL, onSettings, setSettings, type Settings } from "./shared";
+import { BARE_HOSTS, detectAgent, outputLink, parseLink, type ParsedLink } from "../../src/lib/links";
+import { agentOf, APP_URL, getSettings, isRaw, MP_LABEL, onSettings, setSettings, type Settings } from "./shared";
+import { agentIcon, CARD_CSS, h, ICON, primaryLink, productCard } from "./ui";
 
 let settings: Settings = { fav: null, pill: true, rewrite: false };
 
@@ -73,30 +64,41 @@ chrome.runtime.onMessage.addListener((msg) => {
 });
 
 // --- Floating button on product pages ---------------------------------------
-const h = (tag: string, cls = "", text = ""): HTMLElement => {
-  const el = document.createElement(tag);
-  if (cls) el.className = cls;
-  if (text) el.textContent = text;
-  return el;
-};
-
-function icon(a: AgentDef, size = 18): HTMLElement {
-  const wrap = h("span", "ico");
-  wrap.style.width = wrap.style.height = size + "px";
-  wrap.textContent = a.name[0];
-  const img = document.createElement("img");
-  img.src = faviconUrl(a.hosts[0]);
-  img.alt = "";
-  img.onload = () => {
-    wrap.textContent = "";
-    wrap.appendChild(img);
-  };
-  return wrap;
-}
+// Three states: a small dot (minimised on this site), the bar (primary link +
+// copy), and the panel (the shared product card) above the bar.
 
 let hiddenFor = "";
 let openPanel = false;
 let current = "";
+let minimised = false; // per site, remembered in chrome.storage.local
+const MIN_KEY = "minHosts";
+
+chrome.storage.local.get({ [MIN_KEY]: [] as string[] }).then((v) => {
+  minimised = (v[MIN_KEY] as string[]).includes(host);
+  renderPill();
+});
+chrome.storage.onChanged.addListener((c, area) => {
+  if (area === "local" && c[MIN_KEY]) {
+    minimised = ((c[MIN_KEY].newValue as string[]) ?? []).includes(host);
+    renderPill();
+  }
+});
+async function setMinimised(on: boolean) {
+  minimised = on;
+  openPanel = false;
+  const v = await chrome.storage.local.get({ [MIN_KEY]: [] as string[] });
+  const list = (v[MIN_KEY] as string[]).filter((x) => x !== host);
+  if (on) list.push(host);
+  await chrome.storage.local.set({ [MIN_KEY]: list });
+  renderPill();
+}
+
+function logoImg(): HTMLImageElement {
+  const img = document.createElement("img");
+  img.src = chrome.runtime.getURL("icons/icon-128.png");
+  img.alt = "";
+  return img;
+}
 
 function renderPill() {
   const href = location.href;
@@ -106,112 +108,90 @@ function renderPill() {
   if (!p || hiddenFor === href) return;
   current = href;
 
-  const source = detectAgent(href);
-  const agent = agentOf(settings.fav);
-  const original = marketplaceUrl(p.marketplace, p.id);
-  const agentLink = agent ? buildAgentLink(agent.key, p) : null;
-  const reverse = !!source || !agent; // on an agent's page, the raw link leads
-
   const pill = h("div", "pill" + (openPanel ? " open" : ""));
 
-  // Panel (details)
-  const panel = h("div", "panel");
-  const head = h("div", "head");
-  const tag = h("span", "mp mp-" + p.marketplace, MP_LABEL[p.marketplace]);
-  head.append(tag, h("span", "id", "#" + p.id));
-  if (source) head.append(h("span", "from", "↩ from " + source.name));
-  const x = h("button", "x", "×");
-  x.title = "Hide on this page";
-  x.onclick = () => {
-    hiddenFor = href;
+  if (minimised) {
+    const dotBtn = h("button", "mini");
+    dotBtn.title = "Personal Catalog — convert this product";
+    dotBtn.append(logoImg());
+    dotBtn.onclick = () => setMinimised(false);
+    pill.append(dotBtn);
+    r.appendChild(pill);
+    return;
+  }
+
+  const source = detectAgent(href);
+  const prim = primaryLink(p, settings.fav, source);
+
+  // Panel
+  if (openPanel) {
+    const panel = h("div", "panel");
+    const head = h("div", "head");
+    head.append(h("span", "mp-tag mp-" + p.marketplace, MP_LABEL[p.marketplace]), h("span", "id", "#" + p.id));
+    if (source) head.append(h("span", "from", "from " + source.name));
+    const x = h("button", "ib hx");
+    x.innerHTML = ICON.close;
+    x.title = "Hide on this page";
+    x.onclick = () => {
+      hiddenFor = href;
+      renderPill();
+    };
+    head.append(x);
+
+    const mini = h("button", "ghost");
+    mini.innerHTML = ICON.minus;
+    mini.append(document.createTextNode("Shrink on this site"));
+    mini.title = "Keep just a small dot on this site";
+    mini.onclick = () => setMinimised(true);
+
+    panel.append(
+      head,
+      productCard(p, {
+        fav: settings.fav,
+        source,
+        onCopy: copy,
+        onPick: (k) => setSettings({ fav: k }),
+        onCatalog: () => {
+          chrome.runtime.sendMessage({ type: "pc-catalog" });
+          toast("Opening your catalog…");
+        },
+        extraFooter: [mini],
+      }),
+    );
+    pill.append(panel);
+  }
+
+  // Bar
+  const bar = h("div", "bar");
+  const logo = h("button", "logo");
+  logo.title = openPanel ? "Close" : "More options";
+  logo.append(logoImg());
+  logo.onclick = () => {
+    openPanel = !openPanel;
     renderPill();
   };
-  head.append(x);
-  panel.append(head);
-
-  const row = (label: string, sub: string, link: string | null, lead: HTMLElement) => {
-    const el = h("div", "row");
-    const txt = h("div", "txt");
-    txt.append(h("div", "l", label), h("div", "s", sub));
-    el.append(lead, txt);
-    if (link) {
-      const c = h("button", "b", "Copy");
-      c.onclick = () => copy(link, `Copied ${label}`);
-      const o = h("a", "b", "Open ↗") as HTMLAnchorElement;
-      o.href = link;
-      o.target = "_blank";
-      o.rel = "noreferrer";
-      el.append(c, o);
-    }
-    return el;
-  };
-  const dot = h("span", "dot mp-" + p.marketplace);
-  panel.append(row(`${MP_LABEL[p.marketplace]} link`, original, original, dot));
-
-  // Your agent — pick right here.
-  const sel = document.createElement("select");
-  sel.className = "sel";
-  sel.append(new Option("Choose your agent…", ""));
-  sel.append(new Option("Raw link — the original", RAW_KEY, false, isRaw(settings.fav)));
-  for (const a of AGENTS_SORTED) sel.append(new Option(a.name + (a.verified ? "" : " (?)"), a.key, false, a.key === settings.fav));
-  sel.onchange = () => setSettings({ fav: sel.value || null });
-  if (agent && agentLink) {
-    const ar = row(`${agent.name} link`, agentLink, agentLink, icon(agent));
-    panel.append(ar);
-    if (!agent.verified) panel.append(h("div", "warn", `${agent.name}'s link format isn't confirmed yet.`));
-  }
-  const pickRow = h("div", "pick");
-  pickRow.append(h("span", "k", "Your agent"), sel);
-  panel.append(pickRow);
-
-  const cat = h("button", "cat", "＋ Add to catalog — title, price & every photo");
-  cat.onclick = () => {
-    chrome.runtime.sendMessage({ type: "pc-catalog" });
-    toast("Opening your catalog…");
-  };
-  panel.append(cat);
-
-  panel.append(h("div", "k all", "All agents — click to open"));
-  const grid = h("div", "grid");
-  for (const a of AGENTS_SORTED) {
-    if (a.key === source?.key || a.key === agent?.key) continue;
-    const l = buildAgentLink(a.key, p);
-    if (!l) continue;
-    const chip = h("a", "chip" + (a.verified ? "" : " unv")) as HTMLAnchorElement;
-    chip.href = l;
-    chip.target = "_blank";
-    chip.rel = "noreferrer";
-    chip.title = a.verified ? `Open in ${a.name}` : `Open in ${a.name} — format not confirmed`;
-    chip.append(icon(a, 14), document.createTextNode(a.name));
-    grid.append(chip);
-  }
-  panel.append(grid);
-  pill.append(panel);
-
-  // Bar (always visible)
-  const bar = h("div", "bar");
-  const logo = document.createElement("img");
-  logo.className = "logo";
-  logo.src = chrome.runtime.getURL("icons/icon-128.png");
-  logo.alt = "";
-  logo.title = "Personal Catalog";
   const main = h("a", "main") as HTMLAnchorElement;
+  main.href = prim.url;
   main.target = "_blank";
   main.rel = "noreferrer";
-  if (reverse) {
-    main.href = original;
-    main.textContent = `${MP_LABEL[p.marketplace]} ↗`;
-    main.title = "Open the original link";
-  } else {
-    main.href = agentLink!;
-    main.append(icon(agent!, 16), document.createTextNode(`${agent!.name} ↗`));
-    main.title = `Open in ${agent!.name}`;
-  }
-  const cp = h("button", "cp", "Copy");
-  const primary = reverse ? original : agentLink!;
-  cp.onclick = () => copy(primary, reverse ? `Copied original ${MP_LABEL[p.marketplace]} link` : `Copied ${agent!.name} link`);
-  const more = h("button", "more", openPanel ? "▾" : "▴");
-  more.title = "More";
+  main.title = prim.reverse ? `Open the raw ${prim.label} link` : `Open in ${prim.label}`;
+  if (prim.agent) main.append(agentIcon(prim.agent, 16));
+  main.append(document.createTextNode(prim.reverse ? `Open on ${prim.label}` : `Open in ${prim.label}`));
+  const cp = h("button", "ib");
+  cp.innerHTML = ICON.copy;
+  cp.title = "Copy this link";
+  cp.onclick = () => {
+    copy(prim.url, prim.reverse ? `Copied raw ${prim.label} link` : `Copied ${prim.label} link`);
+    cp.innerHTML = ICON.check;
+    cp.classList.add("ok");
+    setTimeout(() => {
+      cp.innerHTML = ICON.copy;
+      cp.classList.remove("ok");
+    }, 1200);
+  };
+  const more = h("button", "ib tog");
+  more.innerHTML = ICON.chevron;
+  more.title = openPanel ? "Close" : "More options";
   more.onclick = () => {
     openPanel = !openPanel;
     renderPill();
@@ -301,37 +281,25 @@ const CSS = `
 :host{all:initial}
 *{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .pill{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;color:#ecedf1;font-size:13px;line-height:1.3}
-.bar{display:flex;align-items:center;gap:6px;padding:5px;border-radius:999px;background:rgba(14,15,20,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.1);box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 1px rgba(255,46,67,.18)}
-.logo{width:26px;height:26px;border-radius:8px;box-shadow:0 0 14px rgba(255,46,67,.45)}
-.main{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;background:#ff2e43;color:#fff;text-decoration:none;font-weight:600;white-space:nowrap}
+.bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:rgba(13,14,19,.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 32px rgba(0,0,0,.45)}
+.logo,.mini{all:unset;cursor:pointer;display:grid;place-items:center;flex:none;border-radius:999px}
+.logo{width:30px;height:30px;margin-right:2px}
+.logo img{width:24px;height:24px;border-radius:7px}
+.mini{width:40px;height:40px;background:rgba(13,14,19,.9);border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:.75;transition:opacity .15s,transform .15s}
+.mini:hover{opacity:1;transform:scale(1.06)}
+.mini img{width:26px;height:26px;border-radius:7px}
+.main{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 13px 0 11px;border-radius:999px;background:#ff2e43;color:#fff;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap}
 .main:hover{background:#ff4556}
-.cp,.more{all:unset;cursor:pointer;padding:6px 10px;border-radius:999px;color:#c9cbd3;font-size:12px}
-.cp:hover,.more:hover{background:rgba(255,255,255,.08);color:#fff}
-.panel{display:none;width:320px;max-height:70vh;overflow:auto;padding:12px;border-radius:16px;background:rgba(14,15,20,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 20px 60px rgba(0,0,0,.55)}
-.open .panel{display:block}
-.head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.mp{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid currentColor}
-.mp-taobao{color:#ff8a3d}.mp-tmall{color:#ff4d6d}.mp-weidian{color:#ff5a3c}.mp-1688{color:#ffa62b}
-.id{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.main .ico{width:16px;height:16px}
+.bar .ib{width:30px;height:30px;border-radius:999px}
+.tog svg{transition:transform .15s;transform:rotate(180deg)}
+.open .tog svg{transform:none}
+.panel{width:330px;max-height:min(70vh,560px);overflow:auto;padding:12px;border-radius:16px;background:rgba(13,14,19,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.1);box-shadow:0 20px 60px rgba(0,0,0,.55);animation:rise .18s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.head{display:flex;align-items:center;gap:8px;margin:0 0 10px 2px}
+.mp-tag{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid currentColor}
+.id{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#ecedf1}
 .from{color:#8b8f9c;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.x{all:unset;cursor:pointer;margin-left:auto;color:#8b8f9c;font-size:18px;line-height:1;padding:0 4px}.x:hover{color:#fff}
-.row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07)}
-.txt{min-width:0;flex:1}.l{font-size:12.5px}.s{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#8b8f9c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dot{width:10px;height:10px;border-radius:50%;background:currentColor;box-shadow:0 0 10px currentColor;margin:0 4px}
-.b{all:unset;cursor:pointer;padding:4px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.14);font-size:11px;color:#ecedf1;white-space:nowrap}
-.b:hover{border-color:rgba(255,46,67,.6);color:#ff8f9a}
-.warn{font-size:11px;color:#fcd34d;margin:-2px 0 6px 26px}
-.pick{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid rgba(255,255,255,.07)}
-.k{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:#8b8f9c;white-space:nowrap}
-.sel{flex:1;min-width:0;background:#1a1c24;color:#ecedf1;border:1px solid rgba(255,255,255,.14);border-radius:8px;padding:5px 6px;font-size:12px}
-.cat{all:unset;cursor:pointer;display:block;width:100%;text-align:center;margin:6px 0 10px;padding:8px;border-radius:10px;background:rgba(255,46,67,.12);border:1px solid rgba(255,46,67,.35);color:#ff9aa4;font-size:12.5px;box-sizing:border-box}
-.cat:hover{background:rgba(255,46,67,.2);color:#fff}
-.all{margin-bottom:6px}
-.grid{display:flex;flex-wrap:wrap;gap:5px}
-.chip{display:inline-flex;align-items:center;gap:5px;padding:3px 8px 3px 4px;border-radius:999px;border:1px solid rgba(255,255,255,.12);color:#ecedf1;text-decoration:none;font-size:11.5px}
-.chip:hover{border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.05)}
-.chip.unv{border-style:dashed;color:#9da1ad}
-.ico{display:inline-grid;place-items:center;flex:none;border-radius:4px;background:#fff;color:#111;font-size:9px;font-weight:700;overflow:hidden}
-.ico img{width:100%;height:100%;object-fit:cover}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(14,15,20,.94);color:#ecedf1;font-size:13px;border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.5);white-space:nowrap}
-`;
+.head .hx{margin-left:auto;width:24px;height:24px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(13,14,19,.94);color:#ecedf1;font-size:13px;border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.5);white-space:nowrap}
+` + CARD_CSS;
