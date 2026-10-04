@@ -18,6 +18,7 @@ import {
   type ParsedLink,
 } from "@/lib/links";
 import { linkKey } from "@/lib/linkKey";
+import { doppelQueries, doppelSearchUrl } from "@/lib/doppel";
 import { loadLinkIndex, type LinkHit } from "@/lib/linkIndex";
 import { buildImportHash } from "@/lib/import";
 import { useFavAgent } from "@/lib/favAgent";
@@ -926,6 +927,18 @@ function SingleResult({
                 QR
               </button>
             )}
+            <a
+              href={doppelSearchUrl(doppelQueries(p, label, true), label || `${mpName} #${p.id}`)}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-ghost inline-flex items-center gap-1.5 !py-2"
+              title="Search doppel.fit for this — the extension types it into doppel.fit's search"
+            >
+              <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4a7 7 0 1 0 4.2 12.6L20 21m-1.5-10A7 7 0 1 1 11 4Z" />
+              </svg>
+              doppel.fit
+            </a>
             {reverse && twin && (
               <button
                 onClick={() => onCopy("twin", marketplaceUrl(twin, p.id), `Copied ${MP[twin].label} link`)}

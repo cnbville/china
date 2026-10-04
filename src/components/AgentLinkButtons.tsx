@@ -4,6 +4,7 @@ import { useState } from "react";
 import { AGENTS, RAW_KEY, buildAgentLink, marketplaceUrl, parseLink } from "@/lib/links";
 import { openAgentPicker, useFavAgent } from "@/lib/favAgent";
 import { AgentIcon, RawIcon } from "@/components/AgentIcon";
+import { doppelQueries, doppelSearchUrl } from "@/lib/doppel";
 
 const MP_LABEL = { taobao: "Taobao", tmall: "Tmall", weidian: "Weidian", "1688": "1688" } as const;
 
@@ -14,7 +15,15 @@ const MP_LABEL = { taobao: "Taobao", tmall: "Tmall", weidian: "Weidian", "1688":
 // aren't a product (nothing to convert).
 //
 // `compact` is the small pill style used in the Later / Junk card footers.
-export function AgentLinkButtons({ url, compact = false }: { url: string; compact?: boolean }) {
+export function AgentLinkButtons({
+  url,
+  title,
+  compact = false,
+}: {
+  url: string;
+  title?: string | null; // your name for it — doppel.fit searches by it first
+  compact?: boolean;
+}) {
   const [fav] = useFavAgent();
   const [copied, setCopied] = useState<string | null>(null);
   const parsed = parseLink(url);
@@ -25,6 +34,8 @@ export function AgentLinkButtons({ url, compact = false }: { url: string; compac
   const raw = marketplaceUrl(parsed.marketplace, parsed.id);
   const mp = MP_LABEL[parsed.marketplace];
   const agentLink = agent ? buildAgentLink(agent.key, parsed) : null;
+  // doppel.fit: the extension types this into its search (name you gave it first).
+  const doppel = doppelSearchUrl(doppelQueries(parsed, title, true), title || `${MP_LABEL[parsed.marketplace]} #${parsed.id}`);
   // The raw link is worth offering whenever what you saved isn't already it.
   const showRaw = rawPick || url.trim() !== raw;
 
@@ -58,6 +69,9 @@ export function AgentLinkButtons({ url, compact = false }: { url: string; compac
             </button>
           </span>
         )}
+        <a href={doppel} target="_blank" rel="noreferrer" className={`${pill} text-muted hover:text-ink`} title="Search doppel.fit for this (the extension types it in)">
+          doppel ↗
+        </a>
       </>
     );
   }
@@ -79,7 +93,19 @@ export function AgentLinkButtons({ url, compact = false }: { url: string; compac
     </>
   );
 
-  if (rawPick) return rawButtons(true);
+  const doppelButton = (
+    <a href={doppel} target="_blank" rel="noopener noreferrer" className={ghost} title="Search doppel.fit for this (the extension types it in)">
+      ⌕ doppel.fit
+    </a>
+  );
+
+  if (rawPick)
+    return (
+      <>
+        {rawButtons(true)}
+        {doppelButton}
+      </>
+    );
 
   return (
     <>
@@ -111,6 +137,7 @@ export function AgentLinkButtons({ url, compact = false }: { url: string; compac
         </button>
       )}
       {showRaw && rawButtons(false)}
+      {doppelButton}
     </>
   );
 }

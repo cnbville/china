@@ -389,7 +389,7 @@ export function LaterLinks() {
                     <a href={l.url} target="_blank" rel="noreferrer" className="rounded-pill px-2.5 py-1 text-meta text-accentSoft/90 transition-colors hover:bg-surface2 hover:text-accentSoft">
                       Open ↗
                     </a>
-                    <AgentLinkButtons url={l.url} compact />
+                    <AgentLinkButtons url={l.url} title={l.title || l.note} compact />
                     <button
                       onClick={() => setEditing({ id: l.id, title: l.title ?? "", note: l.note ?? "", url: l.url })}
                       className="rounded-pill px-2.5 py-1 text-meta text-muted transition-colors hover:bg-surface2 hover:text-ink"

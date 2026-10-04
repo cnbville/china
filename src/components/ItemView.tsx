@@ -295,6 +295,7 @@ function ItemBody({
 
         <SourcesSection
           itemId={item.id}
+          itemTitle={item.title}
           sources={sorted}
           supabase={supabase}
           refetch={refetch}
@@ -435,11 +436,13 @@ function EntityPicker({
 
 function SourcesSection({
   itemId,
+  itemTitle,
   sources,
   supabase,
   refetch,
 }: {
   itemId: string;
+  itemTitle: string;
   sources: Source[];
   supabase: ReturnType<typeof createClient>;
   refetch: () => Promise<void>;
@@ -552,6 +555,7 @@ function SourcesSection({
             <SourceRow
               key={s.id}
               source={s}
+              itemTitle={itemTitle}
               onEdit={() => {
                 setEditId(s.id);
                 setEditDraft(draftFromSource(s));
@@ -602,10 +606,12 @@ function SourcesSection({
 
 function SourceRow({
   source,
+  itemTitle,
   onEdit,
   onDelete,
 }: {
   source: Source;
+  itemTitle?: string;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -665,7 +671,7 @@ function SourceRow({
           >
             Open link ↗
           </a>
-          <AgentLinkButtons url={source.url} />
+          <AgentLinkButtons url={source.url} title={itemTitle} />
           <button onClick={onEdit} className="text-muted hover:text-ink">
             Edit
           </button>

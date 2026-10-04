@@ -163,7 +163,7 @@ export function JunkLinks() {
                   </div>
                   {parseLink(l.url) && (
                     <div className="-ml-2.5 mt-1 flex flex-wrap items-center">
-                      <AgentLinkButtons url={l.url} compact />
+                      <AgentLinkButtons url={l.url} title={l.note} compact />
                     </div>
                   )}
                 </div>
