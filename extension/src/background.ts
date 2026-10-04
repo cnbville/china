@@ -4,6 +4,7 @@
 
 import { BARE_HOSTS, buildAgentLink, marketplaceUrl, parseLink } from "../../src/lib/links";
 import { extractPage } from "./extract";
+import { doppelQueries, doppelSearchUrl } from "../../src/lib/doppel";
 import { agentOf, getSettings, importUrl, MP_LABEL, onSettings, type Settings } from "./shared";
 
 const PATTERNS = BARE_HOSTS.flatMap((h) => [`*://${h}/*`, `*://*.${h}/*`]);
@@ -28,6 +29,7 @@ function buildMenus(s: Settings) {
     add("open-original", "Open raw link");
     add("copy-original", "Copy raw link");
     line();
+    add("doppel", "Search on doppel.fit");
     add("catalog", "Add to catalog");
   });
 }
@@ -82,6 +84,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const open = (url: string) => chrome.tabs.create({ url, index: (tab?.index ?? 0) + 1 });
   if (action === "open-agent" && agentLink) open(agentLink);
   if (action === "open-original") open(original);
+  if (action === "doppel") open(doppelSearchUrl(doppelQueries(p, info.selectionText || null), `${MP_LABEL[p.marketplace]} #${p.id}`));
   if (action === "copy-agent" && agentLink) copyInTab(tab?.id, agentLink, `Copied ${agent!.name} link`);
   if (action === "copy-original") copyInTab(tab?.id, original, `Copied raw ${MP_LABEL[p.marketplace]} link`);
 });

@@ -13,6 +13,7 @@ import {
   type ParsedLink,
 } from "../../src/lib/links";
 import { agentOf, faviconUrl, isRaw, MP_LABEL } from "./shared";
+import { doppelQueries, doppelSearchUrl } from "../../src/lib/doppel";
 
 export const h = (tag: string, cls = "", text = ""): HTMLElement => {
   const el = document.createElement(tag);
@@ -32,6 +33,7 @@ export const ICON = {
   plus: svg("M12 5v14M5 12h14"),
   link: svg("M9 15l6-6M10.8 6.7l1.6-1.6a3.2 3.2 0 0 1 4.5 4.5l-1.6 1.6M13.2 17.3l-1.6 1.6a3.2 3.2 0 0 1-4.5-4.5l1.6-1.6"),
   minus: svg("M6 12h12"),
+  search: svg("M11 4a7 7 0 1 0 4.2 12.6L20 21m-1.5-10A7 7 0 1 1 11 4Z"),
 };
 
 export function agentIcon(a: AgentDef, size = 18): HTMLElement {
@@ -105,6 +107,7 @@ export type CardOpts = {
   onPick: (key: string | null) => void;
   onCatalog?: () => void;
   catalogLabel?: string;
+  title?: string; // product name, for doppel.fit name searches
   extraFooter?: HTMLElement[];
 };
 
@@ -202,7 +205,7 @@ export function productCard(p: ParsedLink, o: CardOpts): HTMLElement {
   card.append(more);
 
   // Footer: add to catalog (+ host-specific extras)
-  if (o.onCatalog || o.extraFooter?.length) {
+  {
     const foot = h("div", "foot");
     if (o.onCatalog) {
       const cat = h("button", "cat");
@@ -212,7 +215,15 @@ export function productCard(p: ParsedLink, o: CardOpts): HTMLElement {
       cat.onclick = o.onCatalog;
       foot.append(cat);
     }
-    foot.append(...(o.extraFooter ?? []));
+    // Search doppel.fit — the extension types it into doppel.fit's search for you.
+    const dop = h("a", "ghost") as HTMLAnchorElement;
+    dop.href = doppelSearchUrl(doppelQueries(p, o.title), o.title || `${mp} #${p.id}`);
+    dop.target = "_blank";
+    dop.rel = "noreferrer";
+    dop.title = "Open doppel.fit and search for this product";
+    dop.innerHTML = ICON.search;
+    dop.append(document.createTextNode("doppel.fit"));
+    foot.append(dop, ...(o.extraFooter ?? []));
     card.append(foot);
   }
   return card;
@@ -260,7 +271,7 @@ export const CARD_CSS = `
 .chip .ib{width:20px;height:20px;border-radius:999px;opacity:.35;margin-right:1px}
 .chip:hover .ib,.chip .ib.ok{opacity:1}
 .chip .ib svg{width:11px;height:11px}
-.foot{display:flex;align-items:center;gap:6px;margin-top:10px}
+.foot{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin-top:10px}
 .cat{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:999px;border:1px solid rgba(255,46,67,.35);background:rgba(255,46,67,.1);color:#ff9aa4;font-size:12px}
 .cat:hover{background:rgba(255,46,67,.2);color:#fff}
 .ghost{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:999px;color:#8b8f9c;font-size:12px}

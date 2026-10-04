@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Personal Catalog \u2014 Links",
   "short_name": "Catalog Links",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Convert Taobao / Tmall / Weidian / 1688 links to your agent and back, and add products to your Personal Catalog.",
   "icons": {
     "16": "icons/icon-128.png",

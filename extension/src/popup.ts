@@ -47,6 +47,7 @@ function single(p: ParsedLink, raw: string) {
     productCard(p, {
       fav: settings.fav,
       source,
+      title: onPage ? tab!.title : undefined,
       onCopy: copy,
       onPick: async (k) => {
         settings.fav = k;

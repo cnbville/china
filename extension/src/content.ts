@@ -6,17 +6,70 @@
 //    catalog". Shrinks to a dot per site if it's in the way;
 //  • everywhere else (Reddit, Discord web, spreadsheets …), if you turned it on:
 //    product links point at your agent instead;
-//  • the Personal Catalog site: picks up the agent you chose there.
+//  • the Personal Catalog site: picks up the agent you chose there;
+//  • doppel.fit: runs the search a "Search doppel.fit" button handed over.
 
 import { BARE_HOSTS, detectAgent, outputLink, parseLink, type ParsedLink } from "../../src/lib/links";
 import { agentOf, APP_URL, getSettings, isRaw, MP_LABEL, onSettings, setSettings, type Settings } from "./shared";
 import { agentIcon, CARD_CSS, h, ICON, primaryLink, productCard } from "./ui";
+import { queryKind, readDoppelHash } from "../../src/lib/doppel";
+
+// Styles for everything we draw (declared first: the doppel.fit helper can
+// render during startup).
+const CSS = `
+:host{all:initial}
+*{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.pill{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;color:#ecedf1;font-size:13px;line-height:1.3}
+.bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:rgba(13,14,19,.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 32px rgba(0,0,0,.45)}
+.logo,.mini{all:unset;cursor:pointer;display:grid;place-items:center;flex:none;border-radius:999px}
+.logo{width:30px;height:30px;margin-right:2px}
+.logo img{width:24px;height:24px;border-radius:7px}
+.mini{width:40px;height:40px;background:rgba(13,14,19,.9);border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:.75;transition:opacity .15s,transform .15s}
+.mini:hover{opacity:1;transform:scale(1.06)}
+.mini img{width:26px;height:26px;border-radius:7px}
+.main{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 13px 0 11px;border-radius:999px;background:#ff2e43;color:#fff;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap}
+.main:hover{background:#ff4556}
+.main .ico{width:16px;height:16px}
+.bar .ib{width:30px;height:30px;border-radius:999px}
+.tog svg{transition:transform .15s;transform:rotate(180deg)}
+.open .tog svg{transform:none}
+.panel{width:330px;max-height:min(70vh,560px);overflow:auto;padding:12px;border-radius:16px;background:rgba(13,14,19,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.1);box-shadow:0 20px 60px rgba(0,0,0,.55);animation:rise .18s ease-out}
+@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.head{display:flex;align-items:center;gap:8px;margin:0 0 10px 2px}
+.mp-tag{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid currentColor}
+.id{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#ecedf1}
+.from{color:#8b8f9c;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head .hx{margin-left:auto;width:24px;height:24px}
+.foot .shrink{margin-left:auto}
+.dop{position:fixed;right:16px;top:76px;width:300px;padding:10px 12px 12px;border-radius:14px;background:rgba(13,14,19,.94);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 16px 48px rgba(0,0,0,.5);color:#ecedf1;font-size:12.5px;animation:rise .18s ease-out}
+.dop-h{display:flex;align-items:center;gap:8px}
+.dop-t{flex:1;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#8b8f9c}
+.dop-h .ib{width:24px;height:24px}
+.dop-l{margin-top:2px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dop-q{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.dop-c{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 9px;border-radius:999px;border:1px solid rgba(255,255,255,.12);font:11px ui-monospace,SFMono-Regular,Menlo,monospace;color:#c5c8d1;white-space:nowrap;overflow:hidden}
+.dop-c b{font:600 10px ui-sans-serif,system-ui,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#8b8f9c}
+.dop-c:hover{border-color:rgba(255,255,255,.3);color:#fff}
+.dop-c.on{border-color:rgba(255,46,67,.6);background:rgba(255,46,67,.12);color:#fff}
+.dop-n{margin-top:8px;font-size:11px;color:#8b8f9c}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(13,14,19,.94);color:#ecedf1;font-size:13px;border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.5);white-space:nowrap}
+` + CARD_CSS;
 
 let settings: Settings = { fav: null, pill: true, rewrite: false };
 
 const host = location.hostname.toLowerCase();
 const onKnownSite = BARE_HOSTS.some((h) => host === h || host.endsWith("." + h));
 const onCatalog = location.href.startsWith(APP_URL);
+const onDoppel = host === "doppel.fit" || host.endsWith(".doppel.fit");
+
+// Title of the product page (for name searches): og:title beats the tab title.
+function pageTitle(): string {
+  return (
+    document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
+    document.title ||
+    ""
+  ).trim();
+}
 
 // --- Shadow-DOM UI (the page's CSS can't touch it) --------------------------
 let root: ShadowRoot | null = null;
@@ -138,10 +191,9 @@ function renderPill() {
     };
     head.append(x);
 
-    const mini = h("button", "ghost");
+    const mini = h("button", "ib shrink");
     mini.innerHTML = ICON.minus;
-    mini.append(document.createTextNode("Shrink on this site"));
-    mini.title = "Keep just a small dot on this site";
+    mini.title = "Shrink to a small dot on this site";
     mini.onclick = () => setMinimised(true);
 
     panel.append(
@@ -149,6 +201,7 @@ function renderPill() {
       productCard(p, {
         fav: settings.fav,
         source,
+        title: pageTitle(),
         onCopy: copy,
         onPick: (k) => setSettings({ fav: k }),
         onCatalog: () => {
@@ -250,6 +303,115 @@ function syncFromSite() {
   }
 }
 
+// --- doppel.fit: type the handed-over query into its search and submit -----
+// We don't depend on doppel.fit's URL format: we find its search box like a
+// person would (opening it first if it's behind a search icon), type, press
+// Enter. A small helper offers the other queries (link · item # · name).
+const visible = (el: Element) => {
+  const r = (el as HTMLElement).getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+};
+function findSearchBox(): HTMLInputElement | null {
+  const sels = [
+    'input[type="search"]',
+    'input[placeholder*="search" i]',
+    'input[aria-label*="search" i]',
+    'input[name="q"]',
+    'input[name="query"]',
+    'input[name*="search" i]',
+  ];
+  for (const sel of sels)
+    for (const el of Array.from(document.querySelectorAll<HTMLInputElement>(sel))) if (visible(el)) return el;
+  return null;
+}
+function openSearchUi() {
+  const cands = Array.from(document.querySelectorAll<HTMLElement>("button, a, [role=button]"));
+  const btn = cands.find(
+    (el) =>
+      visible(el) &&
+      /search/i.test([el.getAttribute("aria-label"), el.getAttribute("title"), el.textContent].join(" ")),
+  );
+  btn?.click();
+}
+async function waitFor<T>(fn: () => T | null, ms: number): Promise<T | null> {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    const v = fn();
+    if (v) return v;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return null;
+}
+async function doppelSearch(q: string): Promise<boolean> {
+  // Visible box straight away? Otherwise try the search icon, then give a slow
+  // page a little longer (and the icon one more tap).
+  let box = await waitFor(findSearchBox, 1200);
+  if (!box) {
+    openSearchUi();
+    box = await waitFor(findSearchBox, 2500);
+  }
+  if (!box) {
+    openSearchUi();
+    box = await waitFor(findSearchBox, 5000);
+  }
+  if (!box) return false;
+  box.focus();
+  // React/Vue-safe: set through the native setter, then fire input/change.
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box, q);
+  box.dispatchEvent(new Event("input", { bubbles: true }));
+  box.dispatchEvent(new Event("change", { bubbles: true }));
+  const enter = { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true };
+  const down = new KeyboardEvent("keydown", enter);
+  box.dispatchEvent(down);
+  box.dispatchEvent(new KeyboardEvent("keypress", enter));
+  box.dispatchEvent(new KeyboardEvent("keyup", enter));
+  if (!down.defaultPrevented && box.form) {
+    try {
+      box.form.requestSubmit();
+    } catch {
+      /* no-op */
+    }
+  }
+  return true;
+}
+function doppelHelper(qs: string[], label: string | undefined, active: string, failed: boolean) {
+  const r = ui();
+  r.querySelector(".dop")?.remove();
+  const box = h("div", "dop");
+  const head = h("div", "dop-h");
+  head.append(h("span", "dop-t", failed ? "Couldn't find doppel.fit's search box" : "Searching doppel.fit"));
+  const x = h("button", "ib");
+  x.innerHTML = ICON.close;
+  x.title = "Close";
+  x.onclick = () => box.remove();
+  head.append(x);
+  box.append(head);
+  if (label) box.append(h("div", "dop-l", label));
+  const row = h("div", "dop-q");
+  for (const q of qs) {
+    const c = h("button", "dop-c" + (q === active ? " on" : ""));
+    c.title = failed ? `Copy: ${q}` : `Search for: ${q}`;
+    c.append(h("b", "", queryKind(q)), document.createTextNode(q.length > 26 ? q.slice(0, 25) + "…" : q));
+    c.onclick = async () => {
+      if (failed) return copy(q, "Copied — paste it into doppel.fit's search");
+      const ok = await doppelSearch(q);
+      doppelHelper(qs, label, q, !ok);
+    };
+    row.append(c);
+  }
+  box.append(row);
+  box.append(h("div", "dop-n", failed ? "Tap one to copy it, then paste into the search." : "No luck? Try another:"));
+  r.appendChild(box);
+}
+async function runDoppelHandoff() {
+  const job = readDoppelHash(location.hash);
+  if (!job) return;
+  history.replaceState(null, "", location.pathname + location.search); // drop our hash
+  doppelHelper(job.q, job.label, job.q[0], false);
+  const ok = await doppelSearch(job.q[0]);
+  if (!ok) doppelHelper(job.q, job.label, job.q[0], true);
+}
+
 // --- Boot -------------------------------------------------------------------
 function apply(s: Settings) {
   settings = s;
@@ -263,6 +425,10 @@ getSettings().then((s) => {
   apply(s);
   syncFromSite();
 });
+if (onDoppel) {
+  runDoppelHandoff();
+  window.addEventListener("hashchange", runDoppelHandoff); // doppel.fit tab already open
+}
 onSettings(apply);
 if (onCatalog) {
   window.addEventListener("fav-agent-change", syncFromSite);
@@ -277,29 +443,3 @@ setInterval(() => {
   }
 }, 1000);
 
-const CSS = `
-:host{all:initial}
-*{box-sizing:border-box;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.pill{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;color:#ecedf1;font-size:13px;line-height:1.3}
-.bar{display:flex;align-items:center;gap:2px;padding:4px;border-radius:999px;background:rgba(13,14,19,.9);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(255,255,255,.1);box-shadow:0 10px 32px rgba(0,0,0,.45)}
-.logo,.mini{all:unset;cursor:pointer;display:grid;place-items:center;flex:none;border-radius:999px}
-.logo{width:30px;height:30px;margin-right:2px}
-.logo img{width:24px;height:24px;border-radius:7px}
-.mini{width:40px;height:40px;background:rgba(13,14,19,.9);border:1px solid rgba(255,255,255,.12);box-shadow:0 8px 24px rgba(0,0,0,.45);opacity:.75;transition:opacity .15s,transform .15s}
-.mini:hover{opacity:1;transform:scale(1.06)}
-.mini img{width:26px;height:26px;border-radius:7px}
-.main{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 13px 0 11px;border-radius:999px;background:#ff2e43;color:#fff;text-decoration:none;font-weight:600;font-size:13px;white-space:nowrap}
-.main:hover{background:#ff4556}
-.main .ico{width:16px;height:16px}
-.bar .ib{width:30px;height:30px;border-radius:999px}
-.tog svg{transition:transform .15s;transform:rotate(180deg)}
-.open .tog svg{transform:none}
-.panel{width:330px;max-height:min(70vh,560px);overflow:auto;padding:12px;border-radius:16px;background:rgba(13,14,19,.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.1);box-shadow:0 20px 60px rgba(0,0,0,.55);animation:rise .18s ease-out}
-@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.head{display:flex;align-items:center;gap:8px;margin:0 0 10px 2px}
-.mp-tag{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;border:1px solid currentColor}
-.id{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;color:#ecedf1}
-.from{color:#8b8f9c;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.head .hx{margin-left:auto;width:24px;height:24px}
-.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 14px;border-radius:999px;background:rgba(13,14,19,.94);color:#ecedf1;font-size:13px;border:1px solid rgba(255,255,255,.12);box-shadow:0 10px 30px rgba(0,0,0,.5);white-space:nowrap}
-` + CARD_CSS;
