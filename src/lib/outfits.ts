@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { makeVariants } from "./image";
 import { PHOTOS_BUCKET } from "./constants";
 import type { ItemCard, Outfit, OutfitPiece } from "./types";
+import { activeSpace, inSpace, spaceRow } from "./space";
 
 // The fixed slot set for the "Slots" view. Accessory can hold several pieces;
 // the rest are one-per-slot by convention.
@@ -15,10 +16,10 @@ export const OUTFIT_SLOTS = [
 export type OutfitSlot = (typeof OUTFIT_SLOTS)[number];
 
 export async function listOutfits(supabase: SupabaseClient): Promise<Outfit[]> {
-  const { data, error } = await supabase
-    .from("outfits")
-    .select("*")
-    .order("updated_at", { ascending: false });
+  const { data, error } = await inSpace(
+    supabase.from("outfits").select("*"),
+    await activeSpace(),
+  ).order("updated_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Outfit[];
 }
@@ -60,7 +61,7 @@ export async function createOutfit(
 ): Promise<Outfit> {
   const { data, error } = await supabase
     .from("outfits")
-    .insert({})
+    .insert(spaceRow(await activeSpace()))
     .select("*")
     .single();
   if (error) throw error;

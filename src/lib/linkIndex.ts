@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { linkKey } from "./linkKey";
+import { activeSpace, inSpace } from "./space";
 
 // Where a link already lives in your data. "item" = a catalogued item's source.
 export type LinkHit = {
@@ -22,10 +23,12 @@ export async function loadLinkIndex(
     if (k && !idx.has(k)) idx.set(k, hit);
   };
 
+  // Only the side you're on (clothes / PC) — the two are kept fully separate.
+  const space = await activeSpace();
   try {
     const [{ data: srcs }, { data: items }] = await Promise.all([
       supabase.from("sources").select("url, item_id"),
-      supabase.from("items").select("id, title"),
+      inSpace(supabase.from("items").select("id, title"), space),
     ]);
     const titleById = new Map(
       ((items ?? []) as { id: string; title: string }[]).map((i) => [
@@ -34,6 +37,7 @@ export async function loadLinkIndex(
       ]),
     );
     for (const r of (srcs ?? []) as { url: string; item_id: string | null }[]) {
+      if (space && (!r.item_id || !titleById.has(r.item_id))) continue; // other side
       put(linkKey(r.url), {
         where: "item",
         itemId: r.item_id ?? undefined,
@@ -44,14 +48,14 @@ export async function loadLinkIndex(
     /* ignore */
   }
   try {
-    const { data } = await supabase.from("saved_links").select("url");
+    const { data } = await inSpace(supabase.from("saved_links").select("url"), space);
     for (const r of (data ?? []) as { url: string }[])
       put(linkKey(r.url), { where: "later" });
   } catch {
     /* ignore */
   }
   try {
-    const { data } = await supabase.from("junk_links").select("url");
+    const { data } = await inSpace(supabase.from("junk_links").select("url"), space);
     for (const r of (data ?? []) as { url: string }[])
       put(linkKey(r.url), { where: "junk" });
   } catch {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Header } from "@/components/Header";
 import { ItemGrid } from "@/components/ItemGrid";
 import { createClient } from "@/lib/supabase/client";
+import { activeSpace, inSpace } from "@/lib/space";
 import { getSignedUrls } from "@/lib/signedUrls";
 import type { ItemCard } from "@/lib/types";
 
@@ -23,14 +24,18 @@ async function search(q: string): Promise<ItemCard[]> {
   if (!term) return [];
   const supabase = createClient();
   const like = `%${term}%`;
+  const space = await activeSpace(); // search only the side you're on
 
   const [itemsRes, sourcesRes] = await Promise.all([
-    supabase
-      .from("item_cards")
-      .select("*")
-      .or(
-        `title.ilike.${like},type.ilike.${like},brand.ilike.${like},notes.ilike.${like}`,
-      ),
+    inSpace(
+      supabase
+        .from("item_cards")
+        .select("*")
+        .or(
+          `title.ilike.${like},type.ilike.${like},brand.ilike.${like},notes.ilike.${like}`,
+        ),
+      space,
+    ),
     supabase
       .from("sources")
       .select("item_id")
@@ -51,10 +56,10 @@ async function search(q: string): Promise<ItemCard[]> {
     ),
   );
   if (extraIds.length > 0) {
-    const extra = await supabase
-      .from("item_cards")
-      .select("*")
-      .in("id", extraIds);
+    const extra = await inSpace(
+      supabase.from("item_cards").select("*").in("id", extraIds),
+      space,
+    );
     if (extra.error) throw extra.error;
     for (const item of (extra.data ?? []) as ItemCard[]) byId.set(item.id, item);
   }

@@ -2,26 +2,28 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { makeVariants } from "./image";
 import { PHOTOS_BUCKET } from "./constants";
 import type { Category, Collection, ItemPhoto } from "./types";
+import { activeSpace, inSpace, noteKey, spaceRow } from "./space";
 
 // Find an existing collection/category by name (case-insensitive), or create it.
 // Keeps the single user from accumulating near-duplicate "Hoodies"/"hoodies".
+// Scoped to the current side (clothes / PC) — each side has its own lists.
 async function findOrCreate(
   supabase: SupabaseClient,
   table: "collections" | "categories",
   name: string,
 ): Promise<string> {
   const trimmed = name.trim();
-  const { data: existing, error: findErr } = await supabase
-    .from(table)
-    .select("id, name")
-    .ilike("name", trimmed)
-    .limit(1);
+  const space = await activeSpace();
+  const { data: existing, error: findErr } = await inSpace(
+    supabase.from(table).select("id, name").ilike("name", trimmed),
+    space,
+  ).limit(1);
   if (findErr) throw findErr;
   if (existing && existing.length > 0) return existing[0].id as string;
 
   const { data: created, error: insErr } = await supabase
     .from(table)
-    .insert({ name: trimmed })
+    .insert({ name: trimmed, ...spaceRow(space) })
     .select("id")
     .single();
   if (insErr) throw insErr;
@@ -47,10 +49,10 @@ export async function resolveCategoryId(
 export async function listCollections(
   supabase: SupabaseClient,
 ): Promise<Collection[]> {
-  const { data, error } = await supabase
-    .from("collections")
-    .select("*")
-    .order("name");
+  const { data, error } = await inSpace(
+    supabase.from("collections").select("*"),
+    await activeSpace(),
+  ).order("name");
   if (error) throw error;
   return data ?? [];
 }
@@ -86,16 +88,16 @@ export async function deleteCollection(
   const { error } = await supabase.from("collections").delete().eq("id", id);
   if (error) throw error;
   // Best-effort: drop the collection-scoped note (no-op if none exists).
-  await supabase.from("notes").delete().eq("key", `collection:${id}`);
+  await supabase.from("notes").delete().in("key", [`collection:${id}`, noteKey(`collection:${id}`, "pc")]);
 }
 
 export async function listCategories(
   supabase: SupabaseClient,
 ): Promise<Category[]> {
-  const { data, error } = await supabase
-    .from("categories")
-    .select("*")
-    .order("name");
+  const { data, error } = await inSpace(
+    supabase.from("categories").select("*"),
+    await activeSpace(),
+  ).order("name");
   if (error) throw error;
   return data ?? [];
 }

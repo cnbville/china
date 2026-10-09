@@ -4,10 +4,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { AgentMenu } from "@/components/AgentMenu";
+import { SpaceToggle } from "@/components/SpaceToggle";
+import { SPACE_LABEL, useSpace } from "@/lib/space";
 
 export function Header() {
   const router = useRouter();
   const pathname = usePathname();
+  const { space, ready } = useSpace();
+  const clothes = space === "clothes" || ready === false;
 
   async function onSignOut() {
     const supabase = createClient();
@@ -33,13 +37,20 @@ export function Header() {
               Personal Catalog
             </span>
             <span className="mt-0.5 text-[10px] uppercase tracking-[0.28em] text-muted">
-              Private
+              {ready ? SPACE_LABEL[space] : "Private"}
             </span>
           </span>
         </Link>
 
+        {/* The big switch: Clothes ⇄ PC parts. */}
+        <SpaceToggle />
+
         <nav className="ml-auto flex items-center gap-0 sm:gap-1">
-          <IconLink href="/search" label="Search" active={pathname === "/search"}>
+          <IconLink
+            href="/search"
+            label="Search"
+            active={pathname === "/search"}
+          >
             <path d="M11 4a7 7 0 1 0 4.2 12.6L20 21m-1.5-10A7 7 0 1 1 11 4Z" />
           </IconLink>
           <IconLink
@@ -53,6 +64,7 @@ export function Header() {
             href="/agents"
             label="Shipping agents"
             active={pathname === "/agents"}
+            className="hidden sm:block"
           >
             <path d="M3 7h11v9H3zM14 10h4l3 3v3h-7M7 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3ZM17 19a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
           </IconLink>
@@ -85,21 +97,25 @@ export function Header() {
           >
             <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2m2 0v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6M10 11v5M14 11v5" />
           </IconLink>
-          <IconLink
-            href="/outfits"
-            label="Outfits"
-            active={pathname.startsWith("/outfits")}
-          >
-            <path d="M12 3a2.2 2.2 0 0 0-1 4.1V9L3 15.5c-1 .8-.5 2.5.8 2.5h16.4c1.3 0 1.8-1.7.8-2.5L13 9V7.1A2.2 2.2 0 0 0 12 3Z" />
-          </IconLink>
-          <IconLink
-            href="/measurements"
-            label="Measurements"
-            active={pathname === "/measurements"}
-          >
-            <path d="M14.7 2.8 21.2 9.3a1 1 0 0 1 0 1.4L10.7 21.2a1 1 0 0 1-1.4 0L2.8 14.7a1 1 0 0 1 0-1.4L13.3 2.8a1 1 0 0 1 1.4 0Z" />
-            <path d="M8 7.5 10 9.5M11.5 4 14 6.5M4.5 11 6.5 13" />
-          </IconLink>
+          {clothes && (
+            <IconLink
+              href="/outfits"
+              label="Outfits"
+              active={pathname.startsWith("/outfits")}
+            >
+              <path d="M12 3a2.2 2.2 0 0 0-1 4.1V9L3 15.5c-1 .8-.5 2.5.8 2.5h16.4c1.3 0 1.8-1.7.8-2.5L13 9V7.1A2.2 2.2 0 0 0 12 3Z" />
+            </IconLink>
+          )}
+          {clothes && (
+            <IconLink
+              href="/measurements"
+              label="Measurements"
+              active={pathname === "/measurements"}
+            >
+              <path d="M14.7 2.8 21.2 9.3a1 1 0 0 1 0 1.4L10.7 21.2a1 1 0 0 1-1.4 0L2.8 14.7a1 1 0 0 1 0-1.4L13.3 2.8a1 1 0 0 1 1.4 0Z" />
+              <path d="M8 7.5 10 9.5M11.5 4 14 6.5M4.5 11 6.5 13" />
+            </IconLink>
+          )}
 
           <span className="mx-1 hidden h-5 w-px bg-line sm:block" />
 
@@ -168,7 +184,7 @@ function IconLink({
       href={href}
       title={label}
       className={
-        "rounded-card p-1.5 transition-colors hover:bg-surface2 sm:p-2 " +
+        "rounded-card p-1 transition-colors hover:bg-surface2 sm:p-2 " +
         (active ? "text-accentSoft" : "text-muted hover:text-ink") +
         " " +
         className

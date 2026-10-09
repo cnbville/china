@@ -77,7 +77,7 @@ export default function ExtensionPage() {
           <div
             aria-hidden
             className="pointer-events-none absolute -top-28 left-1/2 h-64 w-[36rem] max-w-full -translate-x-1/2 rounded-full opacity-60 blur-3xl"
-            style={{ background: "radial-gradient(60% 60% at 50% 40%, rgba(255,46,67,0.16), transparent 70%)" }}
+            style={{ background: "radial-gradient(60% 60% at 50% 40%, rgb(var(--accent-rgb) / 0.16), transparent 70%)" }}
           />
           <div className="relative">
             <span className="inline-flex items-center gap-2 rounded-pill border border-line/80 bg-card/50 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-muted backdrop-blur">

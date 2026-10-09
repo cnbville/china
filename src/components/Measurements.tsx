@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { activeSpace, inSpace } from "@/lib/space";
 import {
   addField,
   createSet,
@@ -69,7 +70,7 @@ export function Measurements() {
       const supabase = createClient();
       const [{ sets, fields }, itemsRes] = await Promise.all([
         loadMeasurements(supabase),
-        supabase.from("items").select("id, title").order("title"),
+        inSpace(supabase.from("items").select("id, title"), await activeSpace()).order("title"),
       ]);
       setSets(sets);
       setFields(fields);

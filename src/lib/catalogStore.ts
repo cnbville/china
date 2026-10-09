@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Category, Collection, ItemCard } from "@/lib/types";
+import { activeSpace, inSpace, onSpaceChange } from "@/lib/space";
 
 // A single shared, in-memory copy of the whole catalog.
 //
@@ -11,7 +12,8 @@ import type { Category, Collection, ItemCard } from "@/lib/types";
 // All → Wanted — we load everything ONCE and derive each view by filtering in
 // memory. Switching is then instant. A single realtime subscription + focus
 // refetch keeps the cache fresh across both devices, and optimistic helpers make
-// likes / wants / deletes feel immediate.
+// likes / wants / deletes feel immediate. It holds ONE side (clothes / PC):
+// flipping the header toggle clears it and loads the other side.
 
 export type SourceBit = {
   item_id: string;
@@ -39,21 +41,22 @@ function notify() {
 
 async function fetchAll(): Promise<CatalogData> {
   const supabase = createClient();
+  const space = await activeSpace();
   const [itemsRes, srcRes, collRes, catRes] = await Promise.all([
-    supabase
-      .from("item_cards")
-      .select("*")
-      .order("created_at", { ascending: false }),
+    inSpace(supabase.from("item_cards").select("*"), space).order("created_at", {
+      ascending: false,
+    }),
     supabase.from("sources").select("item_id, colors, rank"),
-    supabase.from("collections").select("*").order("name"),
-    supabase.from("categories").select("*").order("name"),
+    inSpace(supabase.from("collections").select("*"), space).order("name"),
+    inSpace(supabase.from("categories").select("*"), space).order("name"),
   ]);
   if (itemsRes.error) throw itemsRes.error;
 
   const items = (itemsRes.data ?? []) as ItemCard[];
+  const ids = new Set(items.map((i) => i.id));
   const sourcesByItem: Record<string, SourceBit[]> = {};
   for (const s of (srcRes.data ?? []) as SourceBit[]) {
-    (sourcesByItem[s.item_id] ??= []).push(s);
+    if (ids.has(s.item_id)) (sourcesByItem[s.item_id] ??= []).push(s);
   }
 
   return {
@@ -116,6 +119,12 @@ function ensureSubscription() {
     .subscribe();
 
   window.addEventListener("focus", () => run(true));
+  // The big toggle: drop the other side's data right away, load this side.
+  onSpaceChange(() => {
+    cache = null;
+    notify();
+    run(true);
+  });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") run(true);
   });

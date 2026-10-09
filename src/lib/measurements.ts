@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Measurement, MeasurementKind, MeasurementSet } from "./types";
+import { activeSpace, inSpace, spaceRow } from "./space";
 
 // Garment groups — the page is organised by these (shirts with shirts, jackets
 // with jackets, pants with pants). Stored in measurement_sets.garment_type.
@@ -109,7 +110,7 @@ export async function loadMeasurements(supabase: SupabaseClient): Promise<{
   fields: Record<string, Measurement[]>;
 }> {
   const [setsRes, msRes] = await Promise.all([
-    supabase.from("measurement_sets").select("*").order("created_at"),
+    inSpace(supabase.from("measurement_sets").select("*"), await activeSpace()).order("created_at"),
     supabase.from("measurements").select("*").order("position"),
   ]);
   if (setsRes.error) throw setsRes.error;
@@ -134,6 +135,7 @@ export async function createSet(
   const { data, error } = await supabase
     .from("measurement_sets")
     .insert({
+      ...spaceRow(await activeSpace()),
       kind: s.kind,
       name: s.name,
       garment_type: s.garment_type ?? null,

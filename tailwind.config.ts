@@ -13,8 +13,8 @@ const config: Config = {
         ink: "#ECEDF1", // primary text
         muted: "#8A909C", // secondary text (cool grey)
         line: "#262B36", // hairline borders
-        accent: "#FF2E43", // cold red
-        accentSoft: "#FF5C6C", // hover / lighter red
+        accent: "rgb(var(--accent-rgb) / <alpha-value>)", // cold red (clothes) · electric blue (PC) — see globals.css
+        accentSoft: "rgb(var(--accent-soft-rgb) / <alpha-value>)", // hover / lighter accent
         accentInk: "#FFFFFF", // text on the accent
       },
       fontFamily: {
@@ -32,7 +32,7 @@ const config: Config = {
       boxShadow: {
         // Soft lift for cards + a faint red glow for accented elements.
         lift: "0 1px 2px rgba(0,0,0,0.4), 0 8px 24px rgba(0,0,0,0.45)",
-        glow: "0 0 0 1px rgba(255,46,67,0.35), 0 8px 30px rgba(255,46,67,0.20)",
+        glow: "0 0 0 1px rgb(var(--accent-rgb) / 0.35), 0 8px 30px rgb(var(--accent-rgb) / 0.20)",
       },
       keyframes: {
         "fade-up": {
