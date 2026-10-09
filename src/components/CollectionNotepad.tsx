@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Collection } from "@/lib/types";
+import { inSpace, noteKey, useSpace } from "@/lib/space";
 
 // A checklist, scoped per collection (or "General" for the whole catalog).
 // Think grocery/to-buy list: add items, tick them off, remove them. Autosaves,
@@ -69,7 +70,10 @@ export function CollectionNotepad() {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadedKey = useRef<string | null>(null);
 
-  const key = sel === "general" ? "general" : `collection:${sel}`;
+  // Each side (clothes / PC) has its own lists.
+  const { space: curSpace, ready } = useSpace();
+  const space = ready ? curSpace : null;
+  const key = noteKey(sel === "general" ? "general" : `collection:${sel}`, space);
   const remaining = items.filter((i) => !i.done).length;
   // Display order: unchecked first, checked sink to the bottom. Stable within
   // each group, so items don't shuffle beyond the check that moved them.
@@ -81,12 +85,12 @@ export function CollectionNotepad() {
   );
 
   useEffect(() => {
-    supabase
-      .from("collections")
-      .select("*")
+    if (ready === null) return; // wait for the side check
+    setSel("general");
+    inSpace(supabase.from("collections").select("*"), space)
       .order("name")
       .then(({ data }) => setCollections((data ?? []) as Collection[]));
-  }, [supabase]);
+  }, [supabase, space, ready]);
 
   // Load the list for the selected scope.
   useEffect(() => {

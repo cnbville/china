@@ -20,6 +20,7 @@ import {
 import { linkKey } from "@/lib/linkKey";
 import { doppelQueries, doppelSearchUrl } from "@/lib/doppel";
 import { loadLinkIndex, type LinkHit } from "@/lib/linkIndex";
+import { activeSpace, onSpaceChange, spaceRow } from "@/lib/space";
 import { buildImportHash } from "@/lib/import";
 import { useFavAgent } from "@/lib/favAgent";
 import { AgentIcon, RawIcon } from "@/components/AgentIcon";
@@ -123,7 +124,9 @@ export function LinkHub() {
 
   // Everything you already have, for the "you've got this" checks.
   useEffect(() => {
-    loadLinkIndex(createClient()).then(setIndex).catch(() => {});
+    const load = () => loadLinkIndex(createClient()).then(setIndex).catch(() => {});
+    load();
+    return onSpaceChange(load); // the other side has its own catalog / Later / Junk
   }, []);
 
   // Paste anywhere on the page · "/" focuses the bar.
@@ -225,8 +228,10 @@ export function LinkHub() {
     const url = marketplaceUrl(p.marketplace, p.id);
     const k = keyOf(p);
     setBusy(`${table}:${k}`);
-    const row: Record<string, string | null> =
-      table === "saved_links" ? { url, title: tag || null } : { url, note: tag || null };
+    const row: Record<string, string | null> = {
+      ...spaceRow(await activeSpace()),
+      ...(table === "saved_links" ? { url, title: tag || null } : { url, note: tag || null }),
+    };
     const { error } = await createClient().from(table).insert(row);
     setBusy(null);
     if (error) {
@@ -387,10 +392,12 @@ export function LinkHub() {
     const fresh = products.filter((x) => !index.has(x.key));
     if (!fresh.length) return;
     setBusy("bulk-later");
+    const sp = spaceRow(await activeSpace());
     const { error } = await createClient()
       .from("saved_links")
       .insert(
         fresh.map((x) => ({
+          ...sp,
           url: marketplaceUrl(x.parsed.marketplace, x.parsed.id),
           title: labelOf(x) || null,
         })),
@@ -445,7 +452,7 @@ export function LinkHub() {
           className="pointer-events-none absolute -top-28 left-1/2 h-64 w-[36rem] max-w-full -translate-x-1/2 rounded-full opacity-60 blur-3xl"
           style={{
             background:
-              "radial-gradient(60% 60% at 50% 40%, rgba(255,46,67,0.16), transparent 70%)",
+              "radial-gradient(60% 60% at 50% 40%, rgb(var(--accent-rgb) / 0.16), transparent 70%)",
           }}
         />
         <div className="relative">
@@ -482,7 +489,7 @@ export function LinkHub() {
         className="glass mt-6 transition-shadow"
         style={
           single?.parsed || analysis.kind === "bulk"
-            ? { boxShadow: "0 0 0 1px rgba(255,46,67,0.28), 0 18px 44px rgba(255,46,67,0.10)" }
+            ? { boxShadow: "0 0 0 1px rgb(var(--accent-rgb) / 0.28), 0 18px 44px rgb(var(--accent-rgb) / 0.10)" }
             : undefined
         }
       >

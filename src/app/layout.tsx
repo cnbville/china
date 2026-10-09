@@ -44,7 +44,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable}`}>
+    <html lang="en" className={`${inter.variable} ${instrumentSerif.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Apply the Clothes / PC side before first paint (no colour flash). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{document.documentElement.dataset.space=localStorage.getItem('catalog-space')==='pc'?'pc':'clothes'}catch(e){}",
+          }}
+        />
+      </head>
       <body className="min-h-screen bg-paper font-sans text-ink antialiased">
         <AuthGate>{children}</AuthGate>
       </body>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import { activeSpace, inSpace, spaceRow } from "@/lib/space";
 import { linkKey } from "@/lib/linkKey";
 import { parseLink } from "@/lib/links";
 import { AgentLinkButtons } from "@/components/AgentLinkButtons";
@@ -38,10 +39,11 @@ function fmtDate(iso: string): string {
 export function JunkLinks() {
   const { data, loading, error, refetch } = useLiveData<JunkLink[]>(async () => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("junk_links")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Only this side's links (clothes / PC are kept completely separate).
+    const { data, error } = await inSpace(
+      supabase.from("junk_links").select("*"),
+      await activeSpace(),
+    ).order("created_at", { ascending: false });
     if (error) throw error;
     return (data ?? []) as JunkLink[];
   });
@@ -68,7 +70,7 @@ export function JunkLinks() {
     setMsg(null);
     const { error } = await createClient()
       .from("junk_links")
-      .insert({ url: u, note: note.trim() || null });
+      .insert({ ...spaceRow(await activeSpace()), url: u, note: note.trim() || null });
     setBusy(false);
     if (error) {
       setMsg(error.message);

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { onSpaceChange } from "@/lib/space";
 
 // Sync, the honest version (plan section 3): this is a server-backed app. Two
 // small things here make it feel synced rather than merely shared —
@@ -56,6 +57,8 @@ export function useLiveData<T>(fetcher: Fetcher<T>, deps: unknown[] = []) {
     };
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisible);
+    // 1b. The Clothes / PC toggle flipped: load the other side.
+    const offSpace = onSpaceChange(() => refetch());
 
     // 2. Realtime: any change to items or sources refetches. Cheap, and keeps an
     //    open tab live when working across both devices at once. The channel name
@@ -80,6 +83,7 @@ export function useLiveData<T>(fetcher: Fetcher<T>, deps: unknown[] = []) {
     return () => {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisible);
+      offSpace();
       supabase.removeChannel(channel);
     };
   }, [refetch]);

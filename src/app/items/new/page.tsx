@@ -8,6 +8,17 @@ import { PhotoInput } from "@/components/PhotoInput";
 import { SourceFields } from "@/components/SourceFields";
 import { createClient } from "@/lib/supabase/client";
 import {
+  activeSpace,
+  getSpace,
+  guessSpace,
+  onSpaceChange,
+  setSpace,
+  SPACE_LABEL,
+  spaceRow,
+  spacesReady,
+  type Space,
+} from "@/lib/space";
+import {
   listCategories,
   listCollections,
   resolveCategoryId,
@@ -73,9 +84,20 @@ export default function AddItemPage() {
   // canonical URL, so we can warn on a duplicate as you type or import.
   const [linkIndex, setLinkIndex] = useState<Map<string, LinkHit>>(new Map());
   const loadedDraft = useRef(false);
+  // An imported listing that reads like the OTHER side (e.g. "RTX 4070 显卡"
+  // while you're on Clothes): ask before saving it to the wrong side.
+  const [sideHint, setSideHint] = useState<Space | null>(null);
 
+  // Lists + duplicate index belong to the current side; reload them if you flip it.
   useEffect(() => {
-    loadLinkIndex(createClient()).then(setLinkIndex).catch(() => {});
+    const load = () => {
+      const supabase = createClient();
+      loadLinkIndex(supabase).then(setLinkIndex).catch(() => {});
+      listCollections(supabase).then(setCollections).catch(() => {});
+      listCategories(supabase).then(setCategories).catch(() => {});
+    };
+    load();
+    return onSpaceChange(load);
   }, []);
 
   // On mount: load the datalists, then either apply a quick-import payload from
@@ -83,11 +105,13 @@ export default function AddItemPage() {
   // draft — it's the deliberate, fresher intent.
   useEffect(() => {
     const supabase = createClient();
-    listCollections(supabase).then(setCollections).catch(() => {});
-    listCategories(supabase).then(setCategories).catch(() => {});
-
     const imported = readImportFromHash();
     if (imported) {
+      const guess = guessSpace(imported.title);
+      if (guess)
+        spacesReady().then((ok) => {
+          if (ok && guess !== getSpace()) setSideHint(guess);
+        });
       // Drop the hash so a refresh doesn't re-import.
       history.replaceState(
         null,
@@ -216,6 +240,7 @@ export default function AddItemPage() {
       ]);
 
       const { error: itemErr } = await supabase.from("items").insert({
+        ...spaceRow(await activeSpace()),
         id: itemId,
         title: draft.title.trim(),
         type: draft.type.trim() || null,
@@ -272,6 +297,32 @@ export default function AddItemPage() {
             ⚡ Quick import
           </Link>
         </div>
+
+        {sideHint && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card border border-accent/50 bg-accent/10 px-4 py-3 text-meta">
+            <span className="min-w-0 flex-1 text-ink">
+              This looks like {sideHint === "pc" ? "a PC part" : "clothing"} — you&rsquo;re on the{" "}
+              {SPACE_LABEL[getSpace()]} side.
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setSpace(sideHint);
+                setSideHint(null);
+              }}
+              className="btn-accent px-3 py-1.5 text-meta"
+            >
+              Add to {SPACE_LABEL[sideHint]}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSideHint(null)}
+              className="text-muted hover:text-ink"
+            >
+              Keep in {SPACE_LABEL[getSpace()]}
+            </button>
+          </div>
+        )}
 
         {importing && (
           <div className="mt-4 rounded-card border border-line bg-surface2/40 px-4 py-3 text-meta">

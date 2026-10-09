@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useLiveData } from "@/lib/hooks";
 import { createClient } from "@/lib/supabase/client";
+import { activeSpace, inSpace, spaceRow } from "@/lib/space";
 import { linkKey } from "@/lib/linkKey";
 import { AgentLinkButtons } from "@/components/AgentLinkButtons";
 import type { SavedLink } from "@/lib/types";
@@ -48,10 +49,11 @@ type Editing = { id: string; title: string; note: string; url: string };
 export function LaterLinks() {
   const { data, loading, error, refetch } = useLiveData<SavedLink[]>(async () => {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("saved_links")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Only this side's links (clothes / PC are kept completely separate).
+    const { data, error } = await inSpace(
+      supabase.from("saved_links").select("*"),
+      await activeSpace(),
+    ).order("created_at", { ascending: false });
     if (error) throw error;
     return (data ?? []) as SavedLink[];
   });
@@ -135,6 +137,7 @@ export function LaterLinks() {
     setBusy(true);
     setMsg(null);
     const { error } = await createClient().from("saved_links").insert({
+      ...spaceRow(await activeSpace()),
       url: u,
       title: title.trim() || null,
       note: note.trim() || null,
